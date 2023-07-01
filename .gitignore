@@ -1,4 +1,5 @@
 # build/temp files
+dist/
 Bin/
 build/
 build-server/
