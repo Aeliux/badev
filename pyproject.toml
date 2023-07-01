@@ -1,0 +1,28 @@
+[tool.poetry]
+name = "badev"
+version = "1.17.21"
+description = "The BombSquad Modding Helper"
+authors = ["Aeliux <itsaeliux@gmail.com>"]
+license = "MIT"
+# readme = "README.md"
+packages = [
+    { include = "babase", from = "src" },
+    { include = "baclassic", from = "src" },
+    { include = "baplus", from = "src" },
+    { include = "bascenev1", from = "src" },
+    { include = "bascenev1lib", from = "src" },
+    { include = "bauiv1", from = "src" },
+    { include = "bauiv1lib", from = "src" },
+    { include = "baenv.py", from = "src" }
+]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+
+[tool.poetry.group.dev.dependencies]
+commitizen = "^3.5.2"
+pre-commit = "^3.3.3"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
