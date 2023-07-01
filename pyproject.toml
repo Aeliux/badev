@@ -4,7 +4,11 @@ version = "1.17.21"
 description = "The BombSquad Modding Helper"
 authors = ["Aeliux <itsaeliux@gmail.com>"]
 license = "MIT"
-# readme = "README.md"
+readme = "README.md"
+classifiers=[
+    "Development Status :: 5 - Production/Stable",
+    "Topic :: Text Editors :: Integrated Development Environments (IDE)"
+]
 packages = [
     { include = "babase", from = "src" },
     { include = "baclassic", from = "src" },
