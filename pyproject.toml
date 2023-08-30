@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "badev"
-version = "1.7.21"
+version = "1.7.25"
 description = "The BombSquad Modding Helper"
 authors = ["Aeliux <itsaeliux@gmail.com>"]
 license = "MIT"
@@ -10,14 +10,14 @@ classifiers=[
     "Topic :: Text Editors :: Integrated Development Environments (IDE)"
 ]
 packages = [
-    { include = "babase", from = "src" },
-    { include = "baclassic", from = "src" },
-    { include = "baplus", from = "src" },
-    { include = "bascenev1", from = "src" },
-    { include = "bascenev1lib", from = "src" },
-    { include = "bauiv1", from = "src" },
-    { include = "bauiv1lib", from = "src" },
-    { include = "baenv.py", from = "src" }
+    { include = "babase", from = "src/assets/ba_data/python" },
+    { include = "baclassic", from = "src/assets/ba_data/python" },
+    { include = "baplus", from = "src/assets/ba_data/python" },
+    { include = "bascenev1", from = "src/assets/ba_data/python" },
+    { include = "bascenev1lib", from = "src/assets/ba_data/python" },
+    { include = "bauiv1", from = "src/assets/ba_data/python" },
+    { include = "bauiv1lib", from = "src/assets/ba_data/python" },
+    { include = "baenv.py", from = "src/assets/ba_data/python" }
 ]
 
 [tool.poetry.dependencies]
