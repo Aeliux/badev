@@ -4,6 +4,8 @@
 [![Supported Python versions](https://img.shields.io/pypi/pyversions/badev.svg)](https://pypi.org/project/badev/)
 [![Downloads](https://pepy.tech/badge/badev)](https://pepy.tech/project/badev)
 
+This package is not affiliated with the BombSquad official team.
+
 This package aims to facilitate the development of the BombSquad mods
 and benefiting from the features of the programs like vscode to autocomplete and give suggestions to you.
 
