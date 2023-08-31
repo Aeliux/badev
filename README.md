@@ -2,7 +2,7 @@
 
 [![PyPI](https://img.shields.io/pypi/v/badev)](https://pypi.org/project/badev/)
 [![Supported Python versions](https://img.shields.io/pypi/pyversions/badev.svg)](https://pypi.org/project/badev/)
-[![Downloads](https://pepy.tech/badge/badev)](https://pepy.tech/project/badev)
+[![Downloads](https://static.pepy.tech/badge/badev)](https://pepy.tech/project/badev)
 
 This package is not affiliated with the BombSquad official team.
 
