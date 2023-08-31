@@ -15,8 +15,8 @@
 
 namespace ballistica::core {
 
-// Predeclare types we use throughout our FeatureSet so most
-// headers can get away with just including this header.
+// Predeclare types we use throughout our FeatureSet so most headers can get
+// away with just including this header.
 class CoreConfig;
 class CorePython;
 class CorePlatform;
@@ -62,6 +62,7 @@ class CoreFeatureSet {
   /// ensure we don't hang indefinitely.
   void StartSuicideTimer(const std::string& action, millisecs_t delay);
 
+  /// Apply the config set up by baenv to the engine.
   void ApplyBaEnvConfig();
 
   // Call this if the main thread changes.
@@ -114,7 +115,7 @@ class CoreFeatureSet {
   /// Return true if baenv values have been locked in: python paths, log
   /// handling, etc. Early-running code may wish to explicitly avoid making log
   /// calls until this condition is met to ensure predictable behavior.
-  auto HaveBaEnvVals() const { return have_ba_env_vals_; }
+  auto have_ba_env_vals() const { return have_ba_env_vals_; }
 
   /// Return the directory where the app expects to find its bundled Python
   /// files.
@@ -159,7 +160,6 @@ class CoreFeatureSet {
   bool v1_cloud_log_full{};
   int master_server_source{};
   int session_count{};
-  bool shutting_down{};
   bool have_incentivized_ad{false};
   bool should_pause{};
   bool reset_vr_orientation{};

@@ -172,6 +172,7 @@
       <w>basnmessagesender</w>
       <w>basntoclient</w>
       <w>bastd</w>
+      <w>batchserver</w>
       <w>batemplatefs</w>
       <w>batemplatefsmeta</w>
       <w>batocloud</w>
@@ -332,9 +333,12 @@
       <w>clearsign</w>
       <w>clientid</w>
       <w>clientinfo</w>
+      <w>clientprint</w>
+      <w>clientprints</w>
       <w>clienttobasn</w>
       <w>clipcount</w>
       <w>cloudtoba</w>
+      <w>clrtp</w>
       <w>cmakelist</w>
       <w>cmakemodular</w>
       <w>cmakemodularserver</w>
@@ -658,6 +662,7 @@
       <w>flushhhhh</w>
       <w>fname</w>
       <w>fnode</w>
+      <w>fnsu</w>
       <w>fnumc</w>
       <w>fobjc</w>
       <w>focuswindow</w>
@@ -801,6 +806,7 @@
       <w>havn't</w>
       <w>havnt</w>
       <w>hdiutil</w>
+      <w>headlessly</w>
       <w>healthcare</w>
       <w>heldfile</w>
       <w>hexval</w>
@@ -839,7 +845,6 @@
       <w>ignorevar</w>
       <w>iiiiisss</w>
       <w>iiiiisssi</w>
-      <w>iircade</w>
       <w>illum</w>
       <w>ilock</w>
       <w>imagewidget</w>
@@ -956,6 +961,7 @@
       <w>linearsize</w>
       <w>linearstep</w>
       <w>linebegin</w>
+      <w>lineend</w>
       <w>linemax</w>
       <w>linestart</w>
       <w>linestripped</w>
@@ -1639,6 +1645,7 @@
       <w>sssssssi</w>
       <w>ssssssssssss</w>
       <w>ssval</w>
+      <w>stacklevel</w>
       <w>stager</w>
       <w>standin</w>
       <w>startedptr</w>
@@ -1686,6 +1693,7 @@
       <w>subsys</w>
       <w>subtypestr</w>
       <w>successmsg</w>
+      <w>suppressions</w>
       <w>sval</w>
       <w>swidth</w>
       <w>swiftc</w>
@@ -1832,6 +1840,7 @@
       <w>unichar</w>
       <w>unichars</w>
       <w>uninited</w>
+      <w>unintuitively</w>
       <w>unmanaged</w>
       <w>unpaused</w>
       <w>unpausing</w>

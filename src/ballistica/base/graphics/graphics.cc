@@ -2,9 +2,8 @@
 
 #include "ballistica/base/graphics/graphics.h"
 
-#include "ballistica/base/app/app.h"
-#include "ballistica/base/app/app_config.h"
-#include "ballistica/base/app/app_mode.h"
+#include "ballistica/base/app_adapter/app_adapter.h"
+#include "ballistica/base/app_mode/app_mode.h"
 #include "ballistica/base/dynamics/bg/bg_dynamics.h"
 #include "ballistica/base/graphics/component/empty_component.h"
 #include "ballistica/base/graphics/component/object_component.h"
@@ -20,6 +19,7 @@
 #include "ballistica/base/input/input.h"
 #include "ballistica/base/logic/logic.h"
 #include "ballistica/base/python/support/python_context_call.h"
+#include "ballistica/base/support/app_config.h"
 #include "ballistica/base/ui/console.h"
 #include "ballistica/base/ui/ui.h"
 #include "ballistica/core/core.h"
@@ -1116,8 +1116,8 @@ void Graphics::BuildAndPushFrameDef() {
   assert(!building_frame_def_);
   building_frame_def_ = true;
 
-  // We should not be building/pushing any frames until after
-  // app-launch-commands have been run.
+  // We should not be building/pushing any frames until the native
+  // layer is fully bootstrapped.
   BA_PRECONDITION_FATAL(g_base->logic->app_bootstrapping_complete());
 
   // This should no longer be necessary..
@@ -1476,7 +1476,10 @@ void Graphics::DrawCursor(RenderPass* pass, millisecs_t real_time) {
         || real_time - last_cursor_visibility_event_time_ > 2000) {
       hardware_cursor_visible_ = new_cursor_visibility;
       last_cursor_visibility_event_time_ = real_time;
-      g_base->app->PushCursorUpdate(hardware_cursor_visible_);
+      g_core->main_event_loop()->PushCall([this] {
+        assert(g_core && g_core->InMainThread());
+        g_core->platform->SetHardwareCursorVisible(hardware_cursor_visible_);
+      });
     }
   } else {
     // Draw software cursor.
@@ -1928,8 +1931,10 @@ auto Graphics::ScreenMessageEntry::GetText() -> TextGroup& {
   return *s_mesh_;
 }
 
-void Graphics::OnScreenSizeChange(float virtual_width, float virtual_height,
-                                  float pixel_width, float pixel_height) {
+void Graphics::OnScreenSizeChange() {}
+
+void Graphics::SetScreenSize(float virtual_width, float virtual_height,
+                             float pixel_width, float pixel_height) {
   assert(g_base->InLogicThread());
   res_x_virtual_ = virtual_width;
   res_y_virtual_ = virtual_height;

@@ -2,19 +2,18 @@
 
 #include "ballistica/ui_v1/support/root_ui.h"
 
-#include "ballistica/base/app/app_mode.h"
+#include "ballistica/base/app_mode/app_mode.h"
 #include "ballistica/base/graphics/component/simple_component.h"
 #include "ballistica/base/input/device/keyboard_input.h"
 #include "ballistica/base/input/device/touch_input.h"
 #include "ballistica/base/input/input.h"
-#include "ballistica/base/ui/ui.h"
 #include "ballistica/ui_v1/python/ui_v1_python.h"
 #include "ballistica/ui_v1/widget/container_widget.h"
 
 namespace ballistica::ui_v1 {
 
 // Phasing these out; replaced by buttons in our rootwidget.
-#define DO_OLD_MENU_PARTY_BUTTONS (!BA_TOOLBAR_TEST)
+#define DO_OLD_MENU_PARTY_BUTTONS (!BA_UI_V1_TOOLBAR_TEST)
 
 const float kMenuButtonSize = 40.0f;
 const float kMenuButtonDrawDepth = -0.07f;

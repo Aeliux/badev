@@ -36,8 +36,8 @@ class PythonClassHello : public PythonClass {
   static auto tp_new(PyTypeObject* type, PyObject* args, PyObject* keywds)
       -> PyObject*;
   static void tp_dealloc(PythonClassHello* self);
-  static auto Play(PythonClassHello* self, PyObject* args, PyObject* keywds)
-      -> PyObject*;
+  static auto TestMethod(PythonClassHello* self, PyObject* args,
+                         PyObject* keywds) -> PyObject*;
 };
 
 }  // namespace ballistica::template_fs

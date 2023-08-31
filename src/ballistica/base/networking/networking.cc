@@ -2,9 +2,8 @@
 
 #include "ballistica/base/networking/networking.h"
 
-#include "ballistica/base/app/app.h"
-#include "ballistica/base/app/app_config.h"
 #include "ballistica/base/networking/network_reader.h"
+#include "ballistica/base/support/app_config.h"
 #include "ballistica/shared/foundation/event_loop.h"
 #include "ballistica/shared/networking/sockaddr.h"
 
@@ -20,7 +19,7 @@ void Networking::DoApplyAppConfig() {
   // Grab network settings from config and kick them over to the main
   // thread to be applied.
   int port = g_base->app_config->Resolve(AppConfig::IntID::kPort);
-  g_base->app->event_loop()->PushCall([port] {
+  g_core->main_event_loop()->PushCall([port] {
     assert(g_core->InMainThread());
     g_base->network_reader->SetPort(port);
   });

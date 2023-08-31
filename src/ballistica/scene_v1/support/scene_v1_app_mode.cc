@@ -2,7 +2,6 @@
 
 #include "ballistica/scene_v1/support/scene_v1_app_mode.h"
 
-#include "ballistica/base/app/app_config.h"
 #include "ballistica/base/assets/assets.h"
 #include "ballistica/base/audio/audio.h"
 #include "ballistica/base/audio/audio_source.h"
@@ -10,9 +9,9 @@
 #include "ballistica/base/graphics/support/frame_def.h"
 #include "ballistica/base/networking/network_writer.h"
 #include "ballistica/base/python/base_python.h"
+#include "ballistica/base/support/app_config.h"
 #include "ballistica/base/support/plus_soft.h"
 #include "ballistica/base/ui/ui.h"
-#include "ballistica/core/platform/core_platform.h"
 #include "ballistica/scene_v1/connection/connection_set.h"
 #include "ballistica/scene_v1/connection/connection_to_client_udp.h"
 #include "ballistica/scene_v1/connection/connection_to_host.h"
@@ -555,13 +554,7 @@ void SceneV1AppMode::UpdateGameRoster() {
   // ..but only if we have a connected client (otherwise our party is
   // considered 'empty').
 
-  // UPDATE: starting with our big ui revision we'll always include ourself
-  // here.
   bool include_self = (connections()->GetConnectedClientCount() > 0);
-
-#if BA_TOOLBAR_TEST
-  include_self = true;
-#endif  // BA_TOOLBAR_TEST
 
   if (auto* hs = dynamic_cast<HostSession*>(GetForegroundSession())) {
     // Add our host-y self.
@@ -1377,10 +1370,7 @@ void SceneV1AppMode::HandleQuitOnIdle() {
       idle_exiting_ = true;
 
       Log(LogLevel::kInfo, "Quitting due to reaching idle-exit-minutes.");
-      g_base->logic->event_loop()->PushCall([] {
-        assert(g_base->InLogicThread());
-        g_base->python->objs().Get(base::BasePython::ObjID::kQuitCall).Call();
-      });
+      g_base->logic->event_loop()->PushCall([] { g_base->logic->Shutdown(); });
     }
   }
 }
@@ -1471,7 +1461,7 @@ void SceneV1AppMode::HandleGameQuery(const char* buffer, size_t size,
 
 void SceneV1AppMode::RunMainMenu() {
   assert(g_base->InLogicThread());
-  if (g_core->shutting_down) {
+  if (g_base->logic->shutting_down()) {
     return;
   }
   assert(g_base->InLogicThread());

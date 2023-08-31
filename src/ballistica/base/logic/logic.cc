@@ -2,16 +2,18 @@
 
 #include "ballistica/base/logic/logic.h"
 
-#include "ballistica/base/app/app.h"
-#include "ballistica/base/app/app_mode.h"
+#include "ballistica/base/app_adapter/app_adapter.h"
+#include "ballistica/base/app_mode/app_mode.h"
 #include "ballistica/base/audio/audio.h"
 #include "ballistica/base/input/input.h"
+#include "ballistica/base/networking/networking.h"
+#include "ballistica/base/platform/base_platform.h"
 #include "ballistica/base/python/base_python.h"
 #include "ballistica/base/support/plus_soft.h"
+#include "ballistica/base/support/stdio_console.h"
 #include "ballistica/base/ui/console.h"
 #include "ballistica/base/ui/ui.h"
 #include "ballistica/shared/foundation/event_loop.h"
-#include "ballistica/shared/python/python_command.h"
 #include "ballistica/shared/python/python_sys.h"
 
 namespace ballistica::base {
@@ -25,166 +27,82 @@ Logic::Logic() : display_timers_(new TimerList()) {
 }
 
 void Logic::OnMainThreadStartApp() {
+  // Spin up our logic thread and sit and wait for it to init.
   event_loop_ = new EventLoop(EventLoopID::kLogic);
   g_core->pausable_event_loops.push_back(event_loop_);
-
-  // Sit and wait for our logic thread to run its startup stuff.
   event_loop_->PushCallSynchronous([this] { OnAppStart(); });
 }
 
 void Logic::OnAppStart() {
   assert(g_base->InLogicThread());
   g_core->LifecycleLog("on-app-start begin (logic thread)");
-  try {
-    // Our thread should not be holding the GIL here at the start (and
-    // probably not have any Python state at all). So here we set both
-    // of those up.
-    assert(!PyGILState_Check());
-    PyGILState_Ensure();
 
-    // Code running in the logic thread holds the GIL by default.
-    event_loop_->SetAcquiresPythonGIL();
+  // Our thread should not be holding the GIL here at the start (and
+  // probably will not have any Python state at all). So here we set both
+  // of those up.
+  assert(!PyGILState_Check());
+  PyGILState_Ensure();
 
-    // Keep informed when our thread's event loop is pausing/unpausing.
-    event_loop_->AddPauseCallback(
-        NewLambdaRunnableUnmanaged([this] { OnAppPause(); }));
-    event_loop_->AddResumeCallback(
-        NewLambdaRunnableUnmanaged([this] { OnAppResume(); }));
+  // Code running in the logic thread holds the GIL by default.
+  event_loop_->SetAcquiresPythonGIL();
 
-    // Running in a specific order here and should try to stick to it in
-    // other OnAppXXX callbacks so any subsystem interdependencies behave
-    // consistently. When pausing or shutting-down we use the opposite order for
-    // the same reason. Let's do Python last (or first when pausing, etc) since
-    // it will be the most variable; that way it will interact with other
-    // subsystems in their normal states which is less likely to lead to
-    // problems.
-    g_base->graphics->OnAppStart();
-    g_base->audio->OnAppStart();
-    g_base->input->OnAppStart();
-    g_base->ui->OnAppStart();
-    g_core->platform->OnAppStart();
-    g_base->app_mode()->OnAppStart();
-    if (g_base->HavePlus()) {
-      g_base->plus()->OnAppStart();
-    }
-    g_base->python->OnAppStart();
-  } catch (const std::exception& e) {
-    // If anything went wrong, trigger a deferred error.
-    // This way it is more likely we can show a fatal error dialog
-    // since the main thread won't be blocking waiting for us to init.
-    std::string what = e.what();
-    this->event_loop()->PushCall([what] {
-      // Just throw a std exception since our 'what' probably already
-      // contains a stack trace; if we throw a ballistica Exception we
-      // wind up with a useless second one.
-      throw std::logic_error(what.c_str());
-    });
+  // Stay informed when our event loop is pausing/unpausing.
+  event_loop_->AddPauseCallback(
+      NewLambdaRunnableUnmanaged([this] { OnAppPause(); }));
+  event_loop_->AddResumeCallback(
+      NewLambdaRunnableUnmanaged([this] { OnAppResume(); }));
+
+  // Running in a specific order here and should try to stick to it in
+  // other OnAppXXX callbacks so any subsystem interdependencies behave
+  // consistently. When pausing or shutting-down we use the opposite order for
+  // the same reason. Let's do Python last (or first when pausing, etc) since
+  // it will be the most variable; that way it will interact with other
+  // subsystems in their normal states which is less likely to lead to
+  // problems.
+  g_base->platform->OnAppStart();
+  g_base->graphics->OnAppStart();
+  g_base->audio->OnAppStart();
+  g_base->input->OnAppStart();
+  g_base->ui->OnAppStart();
+  g_base->app_mode()->OnAppStart();
+  if (g_base->HavePlus()) {
+    g_base->plus()->OnAppStart();
   }
+  g_base->python->OnAppStart();
+
   g_core->LifecycleLog("on-app-start end (logic thread)");
-}
-
-void Logic::OnAppPause() {
-  assert(g_base->CurrentContext().IsEmpty());
-
-  // Note: keep these in opposite order of OnAppStart.
-  g_base->python->OnAppPause();
-  if (g_base->HavePlus()) {
-    g_base->plus()->OnAppPause();
-  }
-  g_base->app_mode()->OnAppPause();
-  g_core->platform->OnAppPause();
-  g_base->ui->OnAppPause();
-  g_base->input->OnAppPause();
-  g_base->audio->OnAppPause();
-  g_base->graphics->OnAppPause();
-}
-
-void Logic::OnAppResume() {
-  assert(g_base->CurrentContext().IsEmpty());
-
-  // Note: keep these in the same order as OnAppStart.
-  g_base->graphics->OnAppResume();
-  g_base->audio->OnAppResume();
-  g_base->input->OnAppResume();
-  g_base->ui->OnAppResume();
-  g_core->platform->OnAppResume();
-  g_base->app_mode()->OnAppResume();
-  if (g_base->HavePlus()) {
-    g_base->plus()->OnAppResume();
-  }
-  g_base->python->OnAppResume();
-}
-
-void Logic::OnAppShutdown() {
-  assert(g_core);
-  assert(g_base->CurrentContext().IsEmpty());
-
-  // Nuke the app from orbit if we get stuck while shutting down.
-  g_core->StartSuicideTimer("shutdown", 10000);
-
-  // Note: keep these in opposite order of OnAppStart.
-  g_base->python->OnAppShutdown();
-  if (g_base->HavePlus()) {
-    g_base->plus()->OnAppShutdown();
-  }
-  g_base->app_mode()->OnAppShutdown();
-  g_core->platform->OnAppResume();
-  g_base->ui->OnAppShutdown();
-  g_base->input->OnAppShutdown();
-  g_base->audio->OnAppShutdown();
-  g_base->graphics->OnAppShutdown();
-
-  // FIXME: Should add a mechanism where we give the above subsystems
-  //  a short bit of time to complete shutdown if they need it.
-  //  For now just completing instantly.
-  g_base->app->event_loop()->PushCall(
-      [] { g_base->app->LogicThreadShutdownComplete(); });
-}
-
-void Logic::DoApplyAppConfig() {
-  assert(g_base->InLogicThread());
-
-  // Give all our other subsystems a chance.
-  // Note: keep these in the same order as OnAppStart.
-  g_base->graphics->DoApplyAppConfig();
-  g_base->audio->DoApplyAppConfig();
-  g_base->input->DoApplyAppConfig();
-  g_base->ui->DoApplyAppConfig();
-  g_core->platform->DoApplyAppConfig();
-  g_base->app_mode()->DoApplyAppConfig();
-  if (g_base->HavePlus()) {
-    g_base->plus()->DoApplyAppConfig();
-  }
-  g_base->python->DoApplyAppConfig();
-
-  // Give the app subsystem a chance too even though its main-thread based.
-  // We call it here in the logic thread, allowing it to read whatever
-  // it needs and pass it to itself in the main thread.
-  g_base->app->DoLogicThreadApplyAppConfig();
-
-  applied_app_config_ = true;
 }
 
 void Logic::OnInitialScreenCreated() {
   assert(g_base->InLogicThread());
 
-  // Ok; graphics-server is telling us we've got a screen
-  // (or no screen in the case of headless-mode).
-  // We use this as a cue to kick off our business logic.
+  // Ok; graphics-server is telling us we've got a screen (or no screen in
+  // the case of headless-mode). We use this as a cue to kick off our
+  // business logic.
 
-  // Let the Python layer know what's up. It will probably flip to
-  // 'Launching' state.
+  // Let the Python layer know the native layer is now fully functional.
+  // This will probably result in the Python layer flipping to the INITING
+  // state.
   CompleteAppBootstrapping();
 
-  // Push an initial frame to the graphics thread. From this point it will be
-  // self-sustaining; sending us a request for a new one each time it receives
-  // one we send it.
   if (!g_core->HeadlessMode()) {
+    // In gui mode, push an initial frame to the graphics server. From this
+    // point it will be self-sustaining, sending us a frame request each
+    // time it receives a new frame from us.
     g_base->graphics->BuildAndPushFrameDef();
+  } else {
+    // Normally we step display-time as part of our frame-drawing process.
+    // If we're headless, we're not drawing any frames, but we still want to
+    // do minimal processing on any display-time timers. Let's run at a
+    // low-ish rate (10hz) to keep things efficient. Anyone dealing in
+    // display-time should be able to handle a wide variety of rates anyway.
+    // NOTE: This length is currently milliseconds.
+    headless_display_time_step_timer_ = event_loop()->NewTimer(
+        kAppModeMinHeadlessDisplayStep / 1000, true,
+        NewLambdaRunnable([this] { StepDisplayTime(); }));
   }
 }
 
-// Launch into main menu or whatever else.
 void Logic::CompleteAppBootstrapping() {
   assert(g_base->InLogicThread());
   assert(g_base->CurrentContext().IsEmpty());
@@ -192,7 +110,7 @@ void Logic::CompleteAppBootstrapping() {
   assert(!app_bootstrapping_complete_);
   app_bootstrapping_complete_ = true;
 
-  g_core->LifecycleLog("app bootstrapping complete");
+  g_core->LifecycleLog("app native bootstrapping complete");
 
   // Let the assets system know it can start loading stuff now that
   // we have a screen and thus know texture formats/etc.
@@ -201,7 +119,7 @@ void Logic::CompleteAppBootstrapping() {
   //  the renderer is ready and then seamlessly create renderer-specific
   //  ones once the renderer is up. We could likely at least get a lot
   //  of preloads done in the meantime. Though this would require preloads
-  //  to be renderer-agnostic; not sure if that's the case.
+  //  to be renderer-agnostic; not sure if that will always be the case.
   g_base->assets->StartLoading();
 
   // Let base know it can create the console or other asset-dependent things.
@@ -213,18 +131,7 @@ void Logic::CompleteAppBootstrapping() {
   asset_prune_timer_ = event_loop()->NewTimer(
       2345, true, NewLambdaRunnable([] { g_base->assets->Prune(); }));
 
-  // Normally we step display-time as part of our frame-drawing process. If
-  // we're headless, we're not drawing any frames, but we still want to do
-  // minimal processing on any display-time timers. Let's run at a low-ish
-  // rate (10hz) to keep things efficient. Anyone dealing in display-time
-  // should be able to handle a wide variety of rates anyway.
-  if (g_core->HeadlessMode()) {
-    // NOTE: This length is currently milliseconds.
-    headless_display_time_step_timer_ = event_loop()->NewTimer(
-        kAppModeMinHeadlessDisplayStep / 1000, true,
-        NewLambdaRunnable([this] { StepDisplayTime(); }));
-  }
-  // Let our initial app-mode know it has become active.
+  // Let our initial dummy app-mode know it has become active.
   g_base->app_mode()->OnActivate();
 
   // Reset our various subsystems to a default state.
@@ -237,22 +144,154 @@ void Logic::CompleteAppBootstrapping() {
   // Let Python know we're done bootstrapping so it can flip the app
   // into the 'launching' state.
   g_base->python->objs()
-      .Get(BasePython::ObjID::kOnAppBootstrappingCompleteCall)
+      .Get(BasePython::ObjID::kAppOnNativeBootstrappingCompleteCall)
       .Call();
 
   UpdatePendingWorkTimer();
+}
+
+void Logic::OnAppRunning() {
+  assert(g_base->InLogicThread());
+  assert(g_base->CurrentContext().IsEmpty());
+
+  // Currently don't do anything here.
+}
+
+void Logic::OnInitialAppModeSet() {
+  assert(g_base->InLogicThread());
+  assert(g_base->CurrentContext().IsEmpty());
+
+  // We want any sort of raw Python input to only start accepting commands
+  // once we've got an initial app-mode set. Generally said commands will
+  // assume we're running in that mode and will fail if run before it is set.
+  if (auto* console = g_base->console()) {
+    console->EnableInput();
+  }
+  if (g_base->stdio_console) {
+    g_base->stdio_console->Start();
+  }
+}
+
+void Logic::OnAppPause() {
+  assert(g_base->InLogicThread());
+  assert(g_base->CurrentContext().IsEmpty());
+
+  // Note: keep these in opposite order of OnAppStart.
+  g_base->python->OnAppPause();
+  if (g_base->HavePlus()) {
+    g_base->plus()->OnAppPause();
+  }
+  g_base->app_mode()->OnAppPause();
+  g_base->ui->OnAppPause();
+  g_base->input->OnAppPause();
+  g_base->audio->OnAppPause();
+  g_base->graphics->OnAppPause();
+  g_base->platform->OnAppPause();
+}
+
+void Logic::OnAppResume() {
+  assert(g_base->InLogicThread());
+  assert(g_base->CurrentContext().IsEmpty());
+
+  // Note: keep these in the same order as OnAppStart.
+  g_base->platform->OnAppResume();
+  g_base->graphics->OnAppResume();
+  g_base->audio->OnAppResume();
+  g_base->input->OnAppResume();
+  g_base->ui->OnAppResume();
+  g_base->app_mode()->OnAppResume();
+  if (g_base->HavePlus()) {
+    g_base->plus()->OnAppResume();
+  }
+  g_base->python->OnAppResume();
+}
+
+void Logic::Shutdown() {
+  assert(g_base->InLogicThread());
+  assert(g_base->IsAppStarted());
+
+  if (!shutting_down_) {
+    shutting_down_ = true;
+    OnAppShutdown();
+  }
+}
+
+void Logic::OnAppShutdown() {
+  assert(g_core);
+  assert(g_base->CurrentContext().IsEmpty());
+  assert(shutting_down_);
+
+  g_core->LifecycleLog("app state shutting down");
+
+  // Nuke the app from orbit if we get stuck while shutting down.
+  g_core->StartSuicideTimer("shutdown", 10000);
+
+  // Let our subsystems know we're shutting down.
+  // Note: Keep these in opposite order of OnAppStart.
+  // Note2: Any shutdown processes that take a non-zero amount of time
+  // should be registered as shutdown-tasks
+  g_base->python->OnAppShutdown();
+  if (g_base->HavePlus()) {
+    g_base->plus()->OnAppShutdown();
+  }
+  g_base->app_mode()->OnAppShutdown();
+  g_base->ui->OnAppShutdown();
+  g_base->input->OnAppShutdown();
+  g_base->audio->OnAppShutdown();
+  g_base->graphics->OnAppShutdown();
+  g_base->platform->OnAppShutdown();
+}
+
+void Logic::CompleteShutdown() {
+  BA_PRECONDITION(g_base->InLogicThread());
+  BA_PRECONDITION(shutting_down_);
+  BA_PRECONDITION(!shutdown_completed_);
+
+  shutdown_completed_ = true;
+  OnAppShutdownComplete();
+}
+
+void Logic::OnAppShutdownComplete() {
+  assert(g_base->InLogicThread());
+
+  // Wrap up any last business here in the logic thread and then
+  // kick things over to the main thread to exit out of the main loop.
+  g_core->LifecycleLog("app shutdown complete");
+
+  g_core->main_event_loop()->PushCall([] { g_base->OnAppShutdownComplete(); });
+}
+
+void Logic::DoApplyAppConfig() {
+  assert(g_base->InLogicThread());
+
+  // Give all our other subsystems a chance.
+  // Note: keep these in the same order as OnAppStart.
+  g_base->graphics->DoApplyAppConfig();
+  g_base->audio->DoApplyAppConfig();
+  g_base->input->DoApplyAppConfig();
+  g_base->ui->DoApplyAppConfig();
+  g_base->app_mode()->DoApplyAppConfig();
+  if (g_base->HavePlus()) {
+    g_base->plus()->DoApplyAppConfig();
+  }
+  g_base->python->DoApplyAppConfig();
+
+  // Inform some other subsystems even though they're not our standard
+  // set of logic-thread-based ones.
+  g_base->app_adapter->LogicThreadDoApplyAppConfig();
+  g_base->networking->DoApplyAppConfig();
+
+  applied_app_config_ = true;
 }
 
 void Logic::OnScreenSizeChange(float virtual_width, float virtual_height,
                                float pixel_width, float pixel_height) {
   assert(g_base->InLogicThread());
 
-  // First, pass the new values to the graphics subsystem.
-  // Then inform everyone else simply that they changed; they can ask
-  // g_graphics for whatever specific values they need.
+  // Inform all subsystems.
   // Note: keep these in the same order as OnAppStart.
-  g_base->graphics->OnScreenSizeChange(virtual_width, virtual_height,
-                                       pixel_width, pixel_height);
+  g_base->platform->OnScreenSizeChange();
+  g_base->graphics->OnScreenSizeChange();
   g_base->audio->OnScreenSizeChange();
   g_base->input->OnScreenSizeChange();
   g_base->ui->OnScreenSizeChange();
@@ -292,7 +331,6 @@ void Logic::StepDisplayTime() {
     g_base->plus()->StepDisplayTime();
   }
   g_base->python->StepDisplayTime();
-  g_base->app->LogicThreadStepDisplayTime();
 
   // Let's run display-timers *after* we step everything else so most things
   // they interact with will be in an up-to-date state.
@@ -306,8 +344,8 @@ void Logic::StepDisplayTime() {
 void Logic::OnAppModeChanged() {
   assert(g_base->InLogicThread());
 
-  // Kick our headless stepping into high gear; this will snap us out of
-  // any long sleep we're currently in the middle of.
+  // Kick our headless stepping into high gear; this will snap us out of any
+  // long sleep we're currently in the middle of.
   if (g_core->HeadlessMode()) {
     if (debug_log_display_time_) {
       Log(LogLevel::kDebug,
@@ -322,13 +360,13 @@ void Logic::OnAppModeChanged() {
 
 void Logic::UpdateDisplayTimeForHeadlessMode() {
   assert(g_base->InLogicThread());
-  // In this case we just keep display time synced up with app time; we don't
-  // care about keeping the increments smooth or consistent.
+  // In this case we just keep display time synced up with app time; we
+  // don't care about keeping the increments smooth or consistent.
 
   // The one thing we *do* try to do, however, is keep our timer length
   // updated so that we fire exactly when the app mode has events scheduled
-  // (or at least close enough so we can fudge it and tell them its that exact
-  // time).
+  // (or at least close enough so we can fudge it and tell them its that
+  // exact time).
 
   auto app_time_microsecs = g_core->GetAppTimeMicrosecs();
 
@@ -352,9 +390,9 @@ void Logic::UpdateDisplayTimeForHeadlessMode() {
 
 void Logic::PostUpdateDisplayTimeForHeadlessMode() {
   assert(g_base->InLogicThread());
-  // At this point we've stepped our app-mode, so let's ask it how
-  // long we've got until the next event. We'll plug this into our
-  // display-update timer so we can try to sleep until that point.
+  // At this point we've stepped our app-mode, so let's ask it how long
+  // we've got until the next event. We'll plug this into our display-update
+  // timer so we can try to sleep until that point.
   auto headless_display_step_microsecs =
       std::max(std::min(g_base->app_mode()->GetHeadlessDisplayStep(),
                         kAppModeMaxHeadlessDisplayStep),
@@ -376,14 +414,14 @@ void Logic::PostUpdateDisplayTimeForHeadlessMode() {
 }
 
 void Logic::UpdateDisplayTimeForFrameDraw() {
-  // Here we update our smoothed display-time-increment based on how fast
-  // we are currently rendering frames. We want display-time to basically
-  // be progressing at the same rate as app-time but in as constant
-  // of a manner as possible so that animations, simulation-stepping/etc.
-  // appears smooth (app-time measurements at render times exhibit quite a bit
-  // of jitter). Though we also don't want it to be *too* smooth; drops in
-  // framerate should still be reflected quickly in display-time-increment
-  // otherwise it can look like the game is slowing down or speeding up.
+  // Here we update our smoothed display-time-increment based on how fast we
+  // are currently rendering frames. We want display-time to basically be
+  // progressing at the same rate as app-time but in as constant of a manner
+  // as possible so that animations, simulation-stepping/etc. appears smooth
+  // (app-time measurements at render times exhibit quite a bit of jitter).
+  // Though we also don't want it to be *too* smooth; drops in framerate
+  // should still be reflected quickly in display-time-increment otherwise
+  // it can look like the game is slowing down or speeding up.
 
   // Flip this on to debug this stuff.
   // Things to look for:
@@ -417,9 +455,9 @@ void Logic::UpdateDisplayTimeForFrameDraw() {
     }
 
     // It seems that when things get thrown off it is often due to a single
-    // rogue sample being unusually long and often the next one being unusually
-    // short. Let's try to filter out some of these cases by ignoring both
-    // the longest and shortest sample in our set.
+    // rogue sample being unusually long and often the next one being
+    // unusually short. Let's try to filter out some of these cases by
+    // ignoring both the longest and shortest sample in our set.
     int max_index{};
     int min_index{};
     double max_val{recent_display_time_increments_[0]};
@@ -523,8 +561,8 @@ void Logic::UpdateDisplayTimeForFrameDraw() {
 void Logic::UpdatePendingWorkTimer() {
   assert(g_base->InLogicThread());
 
-  // This might get called before we set up our timer in some cases. (such as
-  // very early) should be safe to ignore since we update the interval
+  // This might get called before we set up our timer in some cases. (such
+  // as very early) should be safe to ignore since we update the interval
   // explicitly after creating the timers.
   if (!process_pending_work_timer_) {
     return;
@@ -535,7 +573,8 @@ void Logic::UpdatePendingWorkTimer() {
     assert(process_pending_work_timer_);
     process_pending_work_timer_->SetLength(1);
   } else {
-    // Otherwise we've got nothing to do; go to sleep until something changes.
+    // Otherwise we've got nothing to do; go to sleep until something
+    // changes.
     assert(process_pending_work_timer_);
     process_pending_work_timer_->SetLength(-1);
   }
@@ -544,15 +583,20 @@ void Logic::UpdatePendingWorkTimer() {
 void Logic::HandleInterruptSignal() {
   assert(g_base->InLogicThread());
 
+  // Interrupt signals are 'gentle' requests to shut down.
+
   // Special case; when running under the server-wrapper, we completely
   // ignore interrupt signals (the wrapper acts on them).
-  if (g_base->app->server_wrapper_managed()) {
+  if (g_base->server_wrapper_managed()) {
     return;
   }
+  Shutdown();
+}
 
-  // Go with a low level process shutdown here. In situations
-  // where we're getting interrupt signals I don't think we'd ever want
-  // high level 'soft' quits.
+void Logic::HandleTerminateSignal() {
+  // Interrupt signals are slightly more stern requests to shut down.
+  // We always respond to these.
+  assert(g_base->InLogicThread());
   Shutdown();
 }
 
@@ -560,17 +604,18 @@ void Logic::Draw() {
   assert(g_base->InLogicThread());
   assert(!g_core->HeadlessMode());
 
-  // Push a snapshot of our current state to be rendered in the graphics thread.
+  // Push a snapshot of our current state to be rendered in the graphics
+  // thread.
   g_base->graphics->BuildAndPushFrameDef();
 
-  // Now bring logic up to date.
-  // By doing this *after* fulfilling the draw request, we're minimizing the
-  // chance of long logic updates leading to delays in frame-def delivery
-  // leading to frame drops. The downside is that when logic updates are fast
-  // then logic is basically sitting around twiddling its thumbs and getting
-  // a full frame out of date before being drawn. But as high frame rates are
-  // becoming more normal this becomes less and less meaningful and its probably
-  // best to prioritize smooth visuals.
+  // Now bring logic up to date. By doing this *after* fulfilling the draw
+  // request, we're minimizing the chance of long logic updates leading to
+  // delays in frame-def delivery leading to frame drops. The downside is
+  // that when logic updates are fast then logic is basically sitting around
+  // twiddling its thumbs and getting a full frame out of date before being
+  // drawn. But as high frame rates are becoming more normal this becomes
+  // less and less meaningful and its probably best to prioritize smooth
+  // visuals.
   StepDisplayTime();
 }
 
@@ -578,15 +623,6 @@ void Logic::NotifyOfPendingAssetLoads() {
   assert(g_base->InLogicThread());
   have_pending_loads_ = true;
   UpdatePendingWorkTimer();
-}
-
-void Logic::Shutdown() {
-  assert(g_base->InLogicThread());
-
-  if (!g_core->shutting_down) {
-    g_core->shutting_down = true;
-    OnAppShutdown();
-  }
 }
 
 auto Logic::NewAppTimer(millisecs_t length, bool repeat,

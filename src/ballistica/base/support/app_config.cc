@@ -1,6 +1,6 @@
 // Released under the MIT License. See LICENSE for details.
 
-#include "ballistica/base/app/app_config.h"
+#include "ballistica/base/support/app_config.h"
 
 #include "ballistica/base/python/base_python.h"
 #include "ballistica/core/core.h"
@@ -214,9 +214,8 @@ void AppConfig::SetupEntries() {
   bool_entries_[BoolID::kKickIdlePlayers] =
       BoolEntry("Kick Idle Players", false);
 
-  // (default to internal keyboard on iircade; not elsewhere)
   bool_entries_[BoolID::kAlwaysUseInternalKeyboard] =
-      BoolEntry("Always Use Internal Keyboard", g_buildconfig.iircade_build());
+      BoolEntry("Always Use Internal Keyboard", false);
   bool_entries_[BoolID::kShowFPS] = BoolEntry("Show FPS", false);
   bool_entries_[BoolID::kShowPing] = BoolEntry("Show Ping", false);
   bool_entries_[BoolID::kEnableTVBorder] =

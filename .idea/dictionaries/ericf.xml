@@ -276,6 +276,7 @@
       <w>basnmessagesender</w>
       <w>basntoclient</w>
       <w>bastd</w>
+      <w>batchserver</w>
       <w>batemplatefs</w>
       <w>batemplatefsmeta</w>
       <w>batocloud</w>
@@ -515,6 +516,8 @@
       <w>clearsign</w>
       <w>clientid</w>
       <w>clientlist</w>
+      <w>clientprint</w>
+      <w>clientprints</w>
       <w>clienttobasn</w>
       <w>clionbin</w>
       <w>clioncode</w>
@@ -532,6 +535,7 @@
       <w>clrhdr</w>
       <w>clrnames</w>
       <w>clrred</w>
+      <w>clrtp</w>
       <w>cmakelist</w>
       <w>cmakelists</w>
       <w>cmakemodular</w>
@@ -1084,6 +1088,7 @@
       <w>fnames</w>
       <w>fnmatch</w>
       <w>fnode</w>
+      <w>fnsu</w>
       <w>fnum</w>
       <w>fobjc</w>
       <w>foof</w>
@@ -1331,6 +1336,7 @@
       <w>hdpi</w>
       <w>headercheckline</w>
       <w>headerregistry</w>
+      <w>headlessly</w>
       <w>heapqmodule</w>
       <w>hehe</w>
       <w>heldfile</w>
@@ -1389,7 +1395,6 @@
       <w>ignorevar</w>
       <w>iiarcade</w>
       <w>iiiiisssi</w>
-      <w>iircade</w>
       <w>ilang</w>
       <w>ilck</w>
       <w>ilogput</w>
@@ -1618,6 +1623,7 @@
       <w>linearstep</w>
       <w>linebegin</w>
       <w>linebits</w>
+      <w>lineend</w>
       <w>lineheight</w>
       <w>linemax</w>
       <w>lineno</w>
@@ -2773,6 +2779,7 @@
       <w>sslcontext</w>
       <w>sslproto</w>
       <w>ssval</w>
+      <w>stacklevel</w>
       <w>stackstr</w>
       <w>stager</w>
       <w>standin</w>
@@ -2853,6 +2860,7 @@
       <w>successmsg</w>
       <w>suiciding</w>
       <w>sunau</w>
+      <w>suppressions</w>
       <w>suter</w>
       <w>sval</w>
       <w>svalin</w>
@@ -3135,6 +3143,7 @@
       <w>unimported</w>
       <w>uninferrable</w>
       <w>uninited</w>
+      <w>unintuitively</w>
       <w>uniquify</w>
       <w>unixccompiler</w>
       <w>unknownlintline</w>

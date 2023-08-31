@@ -2,9 +2,8 @@
 
 #include "ballistica/ui_v1/widget/root_widget.h"
 
-#include "ballistica/base/app/app_mode.h"
+#include "ballistica/base/app_mode/app_mode.h"
 #include "ballistica/base/graphics/renderer/renderer.h"
-#include "ballistica/base/ui/ui.h"
 #include "ballistica/ui_v1/python/ui_v1_python.h"
 #include "ballistica/ui_v1/widget/button_widget.h"
 #include "ballistica/ui_v1/widget/stack_widget.h"
@@ -314,7 +313,7 @@ void RootWidget::AddMeter(float h_align, float x, int type, float r, float g,
 #pragma clang diagnostic pop
 
 void RootWidget::Setup() {
-  if (!explicit_bool(BA_TOOLBAR_TEST)) {
+  if (!explicit_bool(BA_UI_V1_TOOLBAR_TEST)) {
     return;
   }
 
@@ -1097,7 +1096,7 @@ void RootWidget::SetScreenWidget(StackWidget* w) {
 
 void RootWidget::SetOverlayWidget(StackWidget* w) {
   // this needs to happen after our buttons and things get added..
-  if (explicit_bool(BA_TOOLBAR_TEST)) {
+  if (explicit_bool(BA_UI_V1_TOOLBAR_TEST)) {
     assert(!buttons_.empty());
   }
   AddWidget(w);

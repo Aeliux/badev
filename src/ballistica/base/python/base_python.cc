@@ -7,13 +7,13 @@
 #include "ballistica/base/python/class/python_class_context_call.h"
 #include "ballistica/base/python/class/python_class_context_ref.h"
 #include "ballistica/base/python/class/python_class_display_timer.h"
+#include "ballistica/base/python/class/python_class_env.h"
 #include "ballistica/base/python/class/python_class_feature_set_data.h"
 #include "ballistica/base/python/class/python_class_simple_sound.h"
 #include "ballistica/base/python/class/python_class_vec3.h"
 #include "ballistica/base/python/methods/python_methods_app.h"
 #include "ballistica/base/python/methods/python_methods_graphics.h"
 #include "ballistica/base/python/methods/python_methods_misc.h"
-#include "ballistica/core/python/core_python.h"
 #include "ballistica/shared/python/python_command.h"
 #include "ballistica/shared/python/python_module_builder.h"
 
@@ -46,6 +46,7 @@ void BasePython::AddPythonClasses(PyObject* module) {
   PythonModuleBuilder::AddClass<PythonClassContextRef>(module);
   PythonModuleBuilder::AddClass<PythonClassAppTimer>(module);
   PythonModuleBuilder::AddClass<PythonClassDisplayTimer>(module);
+  PythonModuleBuilder::AddClass<PythonClassEnv>(module);
   PythonModuleBuilder::AddClass<PythonClassSimpleSound>(module);
   PythonModuleBuilder::AddClass<PythonClassContextCall>(module);
   PyObject* vec3 = PythonModuleBuilder::AddClass<PythonClassVec3>(module);
@@ -120,7 +121,7 @@ void BasePython::SoftImportUIV1() {
 void BasePython::ReadConfig() {
   auto gil{Python::ScopedInterpreterLock()};
   // Read the config file and store the config dict for easy access.
-  objs().Get(ObjID::kReadConfigCall).Call();
+  objs().Get(ObjID::kAppReadConfigCall).Call();
   objs_.Store(ObjID::kConfig, *objs().Get(ObjID::kApp).GetAttr("config"));
   assert(PyDict_Check(*objs().Get(ObjID::kConfig)));
 }
@@ -143,21 +144,24 @@ void BasePython::OnMainThreadStartApp() {
   }
 }
 
-void BasePython::OnAppStart() { assert(g_base->InLogicThread()); }
+void BasePython::OnAppStart() {
+  assert(g_base->InLogicThread());
+  objs().Get(BasePython::ObjID::kAppOnNativeStartCall).Call();
+}
 
 void BasePython::OnAppPause() {
   assert(g_base->InLogicThread());
-  objs().Get(BasePython::ObjID::kOnAppPauseCall).Call();
+  objs().Get(BasePython::ObjID::kAppOnNativePauseCall).Call();
 }
 
 void BasePython::OnAppResume() {
   assert(g_base->InLogicThread());
-  objs().Get(BasePython::ObjID::kOnAppResumeCall).Call();
+  objs().Get(BasePython::ObjID::kAppOnNativeResumeCall).Call();
 }
 
 void BasePython::OnAppShutdown() {
   assert(g_base->InLogicThread());
-  objs().Get(BasePython::ObjID::kShutdownCall).Call();
+  objs().Get(BasePython::ObjID::kAppOnNativeShutdownCall).Call();
 }
 
 void BasePython::DoApplyAppConfig() { assert(g_base->InLogicThread()); }
@@ -550,11 +554,12 @@ auto BasePython::GetTranslation(const char* category, const char* s)
 
 void BasePython::RunDeepLink(const std::string& url) {
   BA_PRECONDITION(g_base->InLogicThread());
-  if (g_base->python->objs().Exists(base::BasePython::ObjID::kDeepLinkCall)) {
+  if (g_base->python->objs().Exists(
+          base::BasePython::ObjID::kAppHandleDeepLinkCall)) {
     ScopedSetContext ssc(nullptr);
     PythonRef args(Py_BuildValue("(s)", url.c_str()), PythonRef::kSteal);
     g_base->python->objs()
-        .Get(base::BasePython::ObjID::kDeepLinkCall)
+        .Get(base::BasePython::ObjID::kAppHandleDeepLinkCall)
         .Call(args);
   } else {
     Log(LogLevel::kError, "Error on deep-link call");

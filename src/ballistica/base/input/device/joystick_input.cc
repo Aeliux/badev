@@ -2,8 +2,8 @@
 
 #include "ballistica/base/input/device/joystick_input.h"
 
-#include "ballistica/base/app/app.h"
-#include "ballistica/base/app/app_mode.h"
+#include "ballistica/base/app_adapter/app_adapter.h"
+#include "ballistica/base/app_mode/app_mode.h"
 #include "ballistica/base/audio/audio.h"
 #include "ballistica/base/graphics/renderer/renderer.h"
 #include "ballistica/base/input/input.h"
@@ -305,9 +305,9 @@ JoystickInput::~JoystickInput() {
   // here in the logic thread..
   if (sdl_joystick_) {
 #if BA_ENABLE_SDL_JOYSTICKS
-    assert(g_base->app);
+    assert(g_base->app_adapter);
     auto joystick = sdl_joystick_;
-    g_base->app->event_loop()->PushCall(
+    g_core->main_event_loop()->PushCall(
         [joystick] { SDL_JoystickClose(joystick); });
     sdl_joystick_ = nullptr;
 #else
@@ -1526,9 +1526,6 @@ auto JoystickInput::GetDeviceIdentifier() -> std::string {
 }
 
 auto JoystickInput::GetPartyButtonName() const -> std::string {
-  if (g_buildconfig.iircade_build()) {
-    return "X";
-  }
   return g_base->assets->CharStr(SpecialChar::kTopButton);
 }
 

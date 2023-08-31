@@ -48,15 +48,10 @@ values = [
     _hooks.empty_call,  # kEmptyCall
     _hooks.print_trace,  # kPrintTraceCall
     _hooks.toggle_fullscreen,  # kToggleFullscreenCall
-    _hooks.read_config,  # kReadConfigCall
     _hooks.ui_remote_press,  # kUIRemotePressCall
     _hooks.remove_in_game_ads_message,  # kRemoveInGameAdsMessageCall
-    _hooks.on_app_pause,  # kOnAppPauseCall
-    _hooks.on_app_resume,  # kOnAppResumeCall
     _hooks.do_quit,  # kQuitCall
-    _hooks.shutdown,  # kShutdownCall
     _hooks.show_post_purchase_message,  # kShowPostPurchaseMessageCall
-    _hooks.on_app_bootstrapping_complete,  # kOnAppBootstrappingCompleteCall
     _language.Lstr,  # kLStrClass
     _general.Call,  # kCallClass
     _apputils.garbage_collect_session_end,  # kGarbageCollectSessionEndCall
@@ -83,6 +78,6 @@ values = [
     _hooks.implicit_sign_out,  # kImplicitSignOutCall
     _hooks.login_adapter_get_sign_in_token_response,  # kLoginAdapterGetSignInTokenResponseCall
     _hooks.open_url_with_webbrowser_module,  # kOpenURLWithWebBrowserModuleCall
-    _env.on_native_module_import,  # kOnNativeModuleImportCall
+    _env.on_native_module_import,  # kEnvOnNativeModuleImportCall
     _env.on_main_thread_start_app,  # kOnMainThreadStartAppCall
 ]

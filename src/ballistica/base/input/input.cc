@@ -2,8 +2,7 @@
 
 #include "ballistica/base/input/input.h"
 
-#include "ballistica/base/app/app_config.h"
-#include "ballistica/base/app/app_mode.h"
+#include "ballistica/base/app_mode/app_mode.h"
 #include "ballistica/base/audio/audio.h"
 #include "ballistica/base/graphics/support/camera.h"
 #include "ballistica/base/input/device/joystick_input.h"
@@ -12,8 +11,10 @@
 #include "ballistica/base/input/device/touch_input.h"
 #include "ballistica/base/logic/logic.h"
 #include "ballistica/base/python/base_python.h"
+#include "ballistica/base/support/app_config.h"
 #include "ballistica/base/ui/console.h"
 #include "ballistica/base/ui/ui.h"
+#include "ballistica/shared/buildconfig/buildconfig_common.h"
 #include "ballistica/shared/foundation/event_loop.h"
 #include "ballistica/shared/generic/utils.h"
 
@@ -22,7 +23,7 @@ namespace ballistica::base {
 Input::Input() = default;
 
 template <typename F>
-void SafePushCall(const char* desc, const F& lambda) {
+void SafePushLogicCall(const char* desc, const F& lambda) {
   // Note: originally this call was created to silently ignore early events
   // coming in before app stuff was up and running, but that was a bad idea,
   // as it caused us to ignore device-create messages sometimes which lead
@@ -41,7 +42,7 @@ void SafePushCall(const char* desc, const F& lambda) {
 }
 
 void Input::PushCreateKeyboardInputDevices() {
-  SafePushCall(__func__, [this] { CreateKeyboardInputDevices(); });
+  SafePushLogicCall(__func__, [this] { CreateKeyboardInputDevices(); });
 }
 
 void Input::CreateKeyboardInputDevices() {
@@ -58,7 +59,7 @@ void Input::CreateKeyboardInputDevices() {
 }
 
 void Input::PushDestroyKeyboardInputDevices() {
-  SafePushCall(__func__, [this] { DestroyKeyboardInputDevices(); });
+  SafePushLogicCall(__func__, [this] { DestroyKeyboardInputDevices(); });
 }
 
 void Input::DestroyKeyboardInputDevices() {
@@ -275,7 +276,7 @@ void Input::ShowStandardInputDeviceDisconnectedMessage(InputDevice* j) {
 
 void Input::PushAddInputDeviceCall(InputDevice* input_device,
                                    bool standard_message) {
-  SafePushCall(__func__, [this, input_device, standard_message] {
+  SafePushLogicCall(__func__, [this, input_device, standard_message] {
     AddInputDevice(input_device, standard_message);
   });
 }
@@ -301,8 +302,8 @@ void Input::AddInputDevice(InputDevice* device, bool standard_message) {
   device->set_delegate(delegate);
   delegate->set_input_device(device);
 
-  // Lets go through and find the first unused input-device id and use that
-  // (might as well keep our list small if we can).
+  // Find the first unused input-device id and use that (might as well keep
+  // our list small if we can).
   int index = 0;
   bool found_slot = false;
   for (auto& input_device : input_devices_) {
@@ -361,7 +362,7 @@ void Input::AddInputDevice(InputDevice* device, bool standard_message) {
 
 void Input::PushRemoveInputDeviceCall(InputDevice* input_device,
                                       bool standard_message) {
-  SafePushCall(__func__, [this, input_device, standard_message] {
+  SafePushLogicCall(__func__, [this, input_device, standard_message] {
     RemoveInputDevice(input_device, standard_message);
   });
 }
@@ -818,8 +819,8 @@ void Input::ProcessStressTesting(int player_count) {
 }
 
 void Input::PushTextInputEvent(const std::string& text) {
-  SafePushCall(__func__, [this, text] {
-    mark_input_active();
+  SafePushLogicCall(__func__, [this, text] {
+    MarkInputActive();
 
     // Ignore  if input is locked.
     if (IsInputLocked()) {
@@ -836,7 +837,7 @@ void Input::PushTextInputEvent(const std::string& text) {
 
 void Input::PushJoystickEvent(const SDL_Event& event,
                               InputDevice* input_device) {
-  SafePushCall(__func__, [this, event, input_device] {
+  SafePushLogicCall(__func__, [this, event, input_device] {
     HandleJoystickEvent(event, input_device);
   });
 }
@@ -854,7 +855,7 @@ void Input::HandleJoystickEvent(const SDL_Event& event,
   }
 
   // Make note that we're not idle.
-  mark_input_active();
+  MarkInputActive();
 
   // And that this particular device isn't idle either.
   input_device->UpdateLastInputTime();
@@ -870,11 +871,11 @@ void Input::HandleJoystickEvent(const SDL_Event& event,
 }
 
 void Input::PushKeyPressEvent(const SDL_Keysym& keysym) {
-  SafePushCall(__func__, [this, keysym] { HandleKeyPress(&keysym); });
+  SafePushLogicCall(__func__, [this, keysym] { HandleKeyPress(&keysym); });
 }
 
 void Input::PushKeyReleaseEvent(const SDL_Keysym& keysym) {
-  SafePushCall(__func__, [this, keysym] { HandleKeyRelease(&keysym); });
+  SafePushLogicCall(__func__, [this, keysym] { HandleKeyRelease(&keysym); });
 }
 
 void Input::CaptureKeyboardInput(HandleKeyPressCall* press_call,
@@ -909,7 +910,7 @@ void Input::ReleaseJoystickInput() {
 void Input::HandleKeyPress(const SDL_Keysym* keysym) {
   assert(g_base->InLogicThread());
 
-  mark_input_active();
+  MarkInputActive();
 
   // Ignore all key presses if input is locked.
   if (IsInputLocked()) {
@@ -963,16 +964,16 @@ void Input::HandleKeyPress(const SDL_Keysym* keysym) {
   if (!g_buildconfig.ostype_ios_tvos() && !g_buildconfig.ostype_android()) {
     // Command-F or Control-F toggles full-screen.
     if (!repeat_press && keysym->sym == SDLK_f
-        && ((keysym->mod & KMOD_CTRL) || (keysym->mod & KMOD_GUI))) {  // NOLINT
+        && ((keysym->mod & KMOD_CTRL) || (keysym->mod & KMOD_GUI))) {
       g_base->python->objs()
           .Get(BasePython::ObjID::kToggleFullscreenCall)
           .Call();
       return;
     }
 
-    // Command-Q or Control-Q quits.
-    if (!repeat_press && keysym->sym == SDLK_q
-        && ((keysym->mod & KMOD_CTRL) || (keysym->mod & KMOD_GUI))) {  // NOLINT
+    // Control-Q quits. On mac, the usual cmd-q gets handled by SDL/etc.
+    // implicitly.
+    if (!repeat_press && keysym->sym == SDLK_q && (keysym->mod & KMOD_CTRL)) {
       g_base->ui->ConfirmQuit();
       return;
     }
@@ -987,7 +988,7 @@ void Input::HandleKeyPress(const SDL_Keysym* keysym) {
   // Ctrl-V or Cmd-V sends paste commands to any interested text fields.
   // Command-Q or Control-Q quits.
   if (!repeat_press && keysym->sym == SDLK_v
-      && ((keysym->mod & KMOD_CTRL) || (keysym->mod & KMOD_GUI))) {  // NOLINT
+      && ((keysym->mod & KMOD_CTRL) || (keysym->mod & KMOD_GUI))) {
     g_base->ui->SendWidgetMessage(WidgetMessage(WidgetMessage::Type::kPaste));
     return;
   }
@@ -1026,13 +1027,14 @@ void Input::HandleKeyPress(const SDL_Keysym* keysym) {
       }
 
       case SDLK_F7:
-        SafePushCall(__func__, [] { g_base->graphics->ToggleManualCamera(); });
+        SafePushLogicCall(__func__,
+                          [] { g_base->graphics->ToggleManualCamera(); });
         handled = true;
         break;
 
       case SDLK_F8:
-        SafePushCall(__func__,
-                     [] { g_base->graphics->ToggleNetworkDebugDisplay(); });
+        SafePushLogicCall(
+            __func__, [] { g_base->graphics->ToggleNetworkDebugDisplay(); });
         handled = true;
         break;
 
@@ -1043,7 +1045,8 @@ void Input::HandleKeyPress(const SDL_Keysym* keysym) {
         break;
 
       case SDLK_F10:
-        SafePushCall(__func__, [] { g_base->graphics->ToggleDebugDraw(); });
+        SafePushLogicCall(__func__,
+                          [] { g_base->graphics->ToggleDebugDraw(); });
         handled = true;
         break;
 
@@ -1081,7 +1084,7 @@ void Input::HandleKeyRelease(const SDL_Keysym* keysym) {
 
   // Note: we want to let these through even if input is locked.
 
-  mark_input_active();
+  MarkInputActive();
 
   // If someone is capturing these events, give them a crack at it.
   if (keyboard_input_capture_release_) {
@@ -1152,7 +1155,7 @@ void Input::UpdateModKeyStates(const SDL_Keysym* keysym, bool press) {
 }
 
 void Input::PushMouseScrollEvent(const Vector2f& amount) {
-  SafePushCall(__func__, [this, amount] { HandleMouseScroll(amount); });
+  SafePushLogicCall(__func__, [this, amount] { HandleMouseScroll(amount); });
 }
 
 void Input::HandleMouseScroll(const Vector2f& amount) {
@@ -1160,7 +1163,7 @@ void Input::HandleMouseScroll(const Vector2f& amount) {
   if (IsInputLocked()) {
     return;
   }
-  mark_input_active();
+  MarkInputActive();
 
   if (std::abs(amount.y) > 0.0001f) {
     g_base->ui->SendWidgetMessage(
@@ -1184,7 +1187,7 @@ void Input::HandleMouseScroll(const Vector2f& amount) {
 
 void Input::PushSmoothMouseScrollEvent(const Vector2f& velocity,
                                        bool momentum) {
-  SafePushCall(__func__, [this, velocity, momentum] {
+  SafePushLogicCall(__func__, [this, velocity, momentum] {
     HandleSmoothMouseScroll(velocity, momentum);
   });
 }
@@ -1194,7 +1197,7 @@ void Input::HandleSmoothMouseScroll(const Vector2f& velocity, bool momentum) {
   if (IsInputLocked()) {
     return;
   }
-  mark_input_active();
+  MarkInputActive();
 
   bool handled = false;
   handled = g_base->ui->SendWidgetMessage(
@@ -1216,13 +1219,14 @@ void Input::HandleSmoothMouseScroll(const Vector2f& velocity, bool momentum) {
 }
 
 void Input::PushMouseMotionEvent(const Vector2f& position) {
-  SafePushCall(__func__, [this, position] { HandleMouseMotion(position); });
+  SafePushLogicCall(__func__,
+                    [this, position] { HandleMouseMotion(position); });
 }
 
 void Input::HandleMouseMotion(const Vector2f& position) {
   assert(g_base->graphics);
   assert(g_base->InLogicThread());
-  mark_input_active();
+  MarkInputActive();
 
   float old_cursor_pos_x = cursor_pos_x_;
   float old_cursor_pos_y = cursor_pos_y_;
@@ -1268,8 +1272,9 @@ void Input::HandleMouseMotion(const Vector2f& position) {
 }
 
 void Input::PushMouseDownEvent(int button, const Vector2f& position) {
-  SafePushCall(__func__,
-               [this, button, position] { HandleMouseDown(button, position); });
+  SafePushLogicCall(__func__, [this, button, position] {
+    HandleMouseDown(button, position);
+  });
 }
 
 void Input::HandleMouseDown(int button, const Vector2f& position) {
@@ -1285,7 +1290,7 @@ void Input::HandleMouseDown(int button, const Vector2f& position) {
   //    return;
   //  }
 
-  mark_input_active();
+  MarkInputActive();
 
   last_mouse_move_time_ = g_core->GetAppTimeMillisecs();
   mouse_move_count_++;
@@ -1344,13 +1349,13 @@ void Input::HandleMouseDown(int button, const Vector2f& position) {
 }
 
 void Input::PushMouseUpEvent(int button, const Vector2f& position) {
-  SafePushCall(__func__,
-               [this, button, position] { HandleMouseUp(button, position); });
+  SafePushLogicCall(
+      __func__, [this, button, position] { HandleMouseUp(button, position); });
 }
 
 void Input::HandleMouseUp(int button, const Vector2f& position) {
   assert(g_base->InLogicThread());
-  mark_input_active();
+  MarkInputActive();
 
   // Convert normalized view coords to our virtual ones.
   cursor_pos_x_ = g_base->graphics->PixelToVirtualX(
@@ -1396,7 +1401,7 @@ void Input::HandleMouseUp(int button, const Vector2f& position) {
 }
 
 void Input::PushTouchEvent(const TouchEvent& e) {
-  SafePushCall(__func__, [e, this] { HandleTouchEvent(e); });
+  SafePushLogicCall(__func__, [e, this] { HandleTouchEvent(e); });
 }
 
 void Input::HandleTouchEvent(const TouchEvent& e) {
@@ -1407,7 +1412,7 @@ void Input::HandleTouchEvent(const TouchEvent& e) {
     return;
   }
 
-  mark_input_active();
+  MarkInputActive();
 
   // float x = e.x;
   // float y = e.y;

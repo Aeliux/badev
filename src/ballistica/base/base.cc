@@ -2,15 +2,12 @@
 
 #include "ballistica/base/base.h"
 
-#include "ballistica/base/app/app.h"
-#include "ballistica/base/app/app_config.h"
-#include "ballistica/base/app/app_mode_empty.h"
-#include "ballistica/base/assets/assets.h"
+#include "ballistica/base/app_adapter/app_adapter.h"
+#include "ballistica/base/app_mode/app_mode_empty.h"
 #include "ballistica/base/assets/assets_server.h"
 #include "ballistica/base/audio/audio.h"
 #include "ballistica/base/audio/audio_server.h"
 #include "ballistica/base/dynamics/bg/bg_dynamics_server.h"
-#include "ballistica/base/graphics/graphics.h"
 #include "ballistica/base/graphics/graphics_server.h"
 #include "ballistica/base/graphics/text/text_graphics.h"
 #include "ballistica/base/input/input.h"
@@ -22,17 +19,17 @@
 #include "ballistica/base/python/base_python.h"
 #include "ballistica/base/python/class/python_class_feature_set_data.h"
 #include "ballistica/base/python/support/python_context_call.h"
+#include "ballistica/base/support/app_config.h"
 #include "ballistica/base/support/huffman.h"
 #include "ballistica/base/support/plus_soft.h"
 #include "ballistica/base/support/stdio_console.h"
+#include "ballistica/base/support/stress_test.h"
 #include "ballistica/base/ui/console.h"
 #include "ballistica/base/ui/ui.h"
-#include "ballistica/core/platform/core_platform.h"
 #include "ballistica/core/python/core_python.h"
 #include "ballistica/shared/foundation/event_loop.h"
 #include "ballistica/shared/foundation/logging.h"
 #include "ballistica/shared/generic/utils.h"
-#include "ballistica/shared/python/python.h"
 #include "ballistica/shared/python/python_command.h"
 
 namespace ballistica::base {
@@ -41,44 +38,49 @@ core::CoreFeatureSet* g_core{};
 BaseFeatureSet* g_base{};
 
 BaseFeatureSet::BaseFeatureSet()
-    : python{new BasePython()},
-      platform{BasePlatform::CreatePlatform()},
-      audio{new Audio()},
-      utils{new Utils()},
-      logic{new Logic()},
-      huffman{new Huffman()},
-      ui{new UI()},
-      networking{new Networking()},
-      app{BasePlatform::CreateApp()},
-      context_ref{new ContextRef(nullptr)},
-      network_reader{new NetworkReader()},
-      network_writer{new NetworkWriter()},
+    : app_adapter{BasePlatform::CreateAppAdapter()},
+      app_config{new AppConfig()},
+      app_mode_{AppModeEmpty::GetSingleton()},
+      assets{new Assets()},
       assets_server{new AssetsServer()},
+      audio{new Audio()},
+      audio_server{new AudioServer()},
+      basn_log_behavior_{g_core->platform->GetEnv("BASNLOG") == "1"},
       bg_dynamics{g_core->HeadlessMode() ? nullptr : new BGDynamics},
       bg_dynamics_server{g_core->HeadlessMode() ? nullptr
                                                 : new BGDynamicsServer},
-      app_config{new AppConfig()},
+      context_ref{new ContextRef(nullptr)},
       graphics{BasePlatform::CreateGraphics()},
       graphics_server{new GraphicsServer()},
+      huffman{new Huffman()},
       input{new Input()},
-      text_graphics{new TextGraphics()},
-      audio_server{new AudioServer()},
-      assets{new Assets()},
-      app_mode_{AppModeEmpty::GetSingleton()},
-      basn_log_behavior_{g_core->platform->GetEnv("BASNLOG") == "1"},
+      logic{new Logic()},
+      network_reader{new NetworkReader()},
+      network_writer{new NetworkWriter()},
+      networking{new Networking()},
+      platform{BasePlatform::CreatePlatform()},
+      python{new BasePython()},
       stdio_console{g_buildconfig.enable_stdio_console() ? new StdioConsole()
-                                                         : nullptr} {
+                                                         : nullptr},
+      stress_test_{new StressTest()},
+      text_graphics{new TextGraphics()},
+      ui{new UI()},
+      utils{new Utils()} {
   // We're a singleton. If there's already one of us, something's wrong.
   assert(g_base == nullptr);
+
+  // We modify some app behavior when run under the server manager.
+  auto* envval = getenv("BA_SERVER_WRAPPER_MANAGED");
+  server_wrapper_managed_ = (envval && strcmp(envval, "1") == 0);
 }
 
 void BaseFeatureSet::OnModuleExec(PyObject* module) {
-  // Ok, our feature-set's Python module is getting imported. Like any
-  // normal Python module, we take this opportunity to import/create the
+  // Ok, our feature-set's Python module is getting imported. Just like a
+  // pure Python module would, we take this opportunity to import/create the
   // stuff we use.
 
   // Importing core should always be the first thing we do. Various
-  // ballistica functionality will fail if this has not been done.
+  // Ballistica functionality will fail if this has not been done.
   assert(g_core == nullptr);
   g_core = core::CoreFeatureSet::Import();
 
@@ -104,17 +106,18 @@ void BaseFeatureSet::OnModuleExec(PyObject* module) {
   g_base->python->AddPythonClasses(module);
 
   // Store our C++ front-end with our Python module. This is what allows
-  // others to 'import' our C++ front end.
+  // other C++ code to 'import' our C++ front end and talk to us directly.
   g_base->StoreOnPythonModule(module);
 
   // Import all the Python stuff we use.
   g_base->python->ImportPythonObjs();
 
   // Run some sanity checks, wire up our log handler, etc.
-  auto result = g_base->python->objs()
-                    .Get(BasePython::ObjID::kOnNativeModuleImportCall)
-                    .Call();
-  if (!result.Exists()) {
+  bool success = g_base->python->objs()
+                     .Get(BasePython::ObjID::kEnvOnNativeModuleImportCall)
+                     .Call()
+                     .Exists();
+  if (!success) {
     FatalError("babase._env.on_native_module_import() call failed.");
   }
 
@@ -174,7 +177,7 @@ void BaseFeatureSet::StartApp() {
 
   g_core->LifecycleLog("start-app begin (main thread)");
 
-  LogVersionInfo();
+  LogVersionInfo_();
 
   // The logic thread (or maybe other things) need to run Python as
   // we're bringing them up, so let it go for the duration of this call.
@@ -201,7 +204,7 @@ void BaseFeatureSet::StartApp() {
   network_writer->OnMainThreadStartApp();
   audio_server->OnMainThreadStartApp();
   assets_server->OnMainThreadStartApp();
-  app->OnMainThreadStartApp();
+  app_adapter->OnMainThreadStartApp();
 
   // Take note that we're now 'running'. Various code such as anything that
   // pushes messages to threads can watch for this state to avoid crashing
@@ -216,13 +219,26 @@ void BaseFeatureSet::StartApp() {
   // rolling.
   {
     Python::ScopedInterpreterLock gil;
-    python->objs().Get(BasePython::ObjID::kPushApplyAppConfigCall).Call();
+    python->objs().Get(BasePython::ObjID::kAppPushApplyAppConfigCall).Call();
   }
 
   g_core->LifecycleLog("start-app end (main thread)");
 }
 
-void BaseFeatureSet::LogVersionInfo() {
+void BaseFeatureSet::OnAppShutdownComplete() {
+  assert(g_core->InMainThread());
+  assert(g_core);
+  assert(g_base);
+
+  // Flag our own event loop to exit (or ask the OS to if they're managing).
+  if (app_adapter->ManagesEventLoop()) {
+    g_core->main_event_loop()->Quit();
+  } else {
+    g_core->platform->QuitApp();
+  }
+}
+
+void BaseFeatureSet::LogVersionInfo_() {
   char buffer[256];
   if (g_buildconfig.headless_build()) {
     snprintf(buffer, sizeof(buffer), "BallisticaKit Headless %s build %d.",
@@ -237,8 +253,8 @@ void BaseFeatureSet::LogVersionInfo() {
 void BaseFeatureSet::set_app_mode(AppMode* mode) {
   assert(InLogicThread());
 
-  // Make an exception here for empty mode since that's in place before an
-  // app mode is officially set.
+  // Redundant sets should not happen (make an exception here for empty mode
+  // since that's in place before any app mode is officially set).
   if (mode == app_mode_ && mode != AppModeEmpty::GetSingleton()) {
     Log(LogLevel::kWarning,
         "set_app_mode called with already-current app-mode; unexpected.");
@@ -269,13 +285,13 @@ void BaseFeatureSet::set_app_mode(AppMode* mode) {
 }
 
 auto BaseFeatureSet::AppManagesEventLoop() -> bool {
-  return app->ManagesEventLoop();
+  return app_adapter->ManagesEventLoop();
 }
 
 void BaseFeatureSet::RunAppToCompletion() {
   BA_PRECONDITION(g_core->InMainThread());
   BA_PRECONDITION(g_base);
-  BA_PRECONDITION(g_base->app->ManagesEventLoop());
+  BA_PRECONDITION(g_base->app_adapter->ManagesEventLoop());
   BA_PRECONDITION(!called_run_app_to_completion_);
   called_run_app_to_completion_ = true;
 
@@ -290,7 +306,7 @@ void BaseFeatureSet::RunAppToCompletion() {
 }
 
 void BaseFeatureSet::PrimeAppMainThreadEventPump() {
-  app->PrimeMainThreadEventPump();
+  app_adapter->PrimeMainThreadEventPump();
 }
 
 auto BaseFeatureSet::HavePlus() -> bool {
@@ -635,24 +651,24 @@ std::string BaseFeatureSet::DoGetContextBaseString() {
 }
 void BaseFeatureSet::DoPrintContextAuto() {
   if (!InLogicThread()) {
-    PrintContextNonLogicThread();
+    PrintContextNonLogicThread_();
   } else if (const char* label = Python::ScopedCallLabel::current_label()) {
-    PrintContextForCallableLabel(label);
+    PrintContextForCallableLabel_(label);
   } else if (PythonCommand* cmd = PythonCommand::current_command()) {
     cmd->PrintContext();
   } else if (PythonContextCall* call = PythonContextCall::current_call()) {
     call->PrintContext();
   } else {
-    PrintContextUnavailable();
+    PrintContextUnavailable_();
   }
 }
-void BaseFeatureSet::PrintContextNonLogicThread() {
+void BaseFeatureSet::PrintContextNonLogicThread_() {
   std::string s = std::string(
       "  root call: <not in logic thread; context_ref unavailable>");
   PySys_WriteStderr("%s\n", s.c_str());
 }
 
-void BaseFeatureSet::PrintContextForCallableLabel(const char* label) {
+void BaseFeatureSet::PrintContextForCallableLabel_(const char* label) {
   assert(InLogicThread());
   assert(label);
   std::string s = std::string("  root call: ") + label + "\n";
@@ -660,7 +676,7 @@ void BaseFeatureSet::PrintContextForCallableLabel(const char* label) {
   PySys_WriteStderr("%s\n", s.c_str());
 }
 
-void BaseFeatureSet::PrintContextUnavailable() {
+void BaseFeatureSet::PrintContextUnavailable_() {
   // (no logic-thread-check here; can be called early or from other threads)
   std::string s = std::string("  root call: <unavailable>\n");
   s += Python::GetContextBaseString();
@@ -699,5 +715,10 @@ void BaseFeatureSet::DoPushObjCall(const PythonObjectSetBase* objset, int id,
 }
 
 auto BaseFeatureSet::IsAppStarted() const -> bool { return app_started_; }
+void BaseFeatureSet::ShutdownSuppressBegin() { shutdown_suppress_count_++; }
+void BaseFeatureSet::ShutdownSuppressEnd() {
+  shutdown_suppress_count_--;
+  assert(shutdown_suppress_count_ >= 0);
+}
 
 }  // namespace ballistica::base

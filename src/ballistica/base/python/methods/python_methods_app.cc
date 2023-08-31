@@ -2,13 +2,12 @@
 
 #include "ballistica/base/python/methods/python_methods_app.h"
 
-#include "ballistica/base/app/app.h"
-#include "ballistica/base/app/app_mode.h"
-#include "ballistica/base/app/app_mode_empty.h"
+#include "ballistica/base/app_mode/app_mode_empty.h"
 #include "ballistica/base/graphics/graphics_server.h"
 #include "ballistica/base/logic/logic.h"
 #include "ballistica/base/python/base_python.h"
 #include "ballistica/base/python/support/python_context_call_runnable.h"
+#include "ballistica/base/support/stress_test.h"
 #include "ballistica/base/ui/ui.h"
 #include "ballistica/core/platform/core_platform.h"
 #include "ballistica/shared/foundation/event_loop.h"
@@ -67,6 +66,28 @@ static PyMethodDef PyRunAppDef = {
     "\n"
     "Note that this only works on platforms/builds where ballistica\n"
     "manages its own event loop.",
+};
+
+// --------------------------- complete_shutdown -------------------------------
+
+static auto PyCompleteShutdown(PyObject* self) -> PyObject* {
+  BA_PYTHON_TRY;
+
+  assert(g_base);
+  g_base->logic->CompleteShutdown();
+
+  Py_RETURN_NONE;
+  BA_PYTHON_CATCH;
+}
+
+static PyMethodDef PyCompleteShutdownDef = {
+    "complete_shutdown",              // name
+    (PyCFunction)PyCompleteShutdown,  // method
+    METH_NOARGS,                      // flags
+
+    "complete_shutdown() -> None\n"
+    "\n"
+    "Complete the shutdown process, triggering the app to exit.\n",
 };
 
 // -------------------------------- appnameupper -------------------------------
@@ -485,6 +506,8 @@ static PyMethodDef PyDisplayTimerDef = {
 static auto PyQuit(PyObject* self, PyObject* args, PyObject* keywds)
     -> PyObject* {
   BA_PYTHON_TRY;
+  BA_PRECONDITION(g_base->IsAppStarted());
+
   static const char* kwlist[] = {"soft", "back", nullptr};
   int soft = 0;
   int back = 0;
@@ -493,7 +516,10 @@ static auto PyQuit(PyObject* self, PyObject* args, PyObject* keywds)
     return nullptr;
   }
 
-  // FIXME this should all just go through platform.
+  // Log(LogLevel::kDebug,
+  //     "QUIT soft=" + std::to_string(soft) + " back=" + std::to_string(back));
+
+  // FIXME this should all just go through platform and/or app-adapter.
 
   if (g_buildconfig.ostype_ios_tvos()) {
     // This should never be called on iOS
@@ -504,9 +530,6 @@ static auto PyQuit(PyObject* self, PyObject* args, PyObject* keywds)
 
   // A few types get handled specially on Android.
   if (g_buildconfig.ostype_android()) {
-#pragma clang diagnostic push
-#pragma ide diagnostic ignored "ConstantConditionsOC"
-
     if (!handled && back) {
       // Back-quit simply synthesizes a back press.
       // Note to self: I remember this behaved slightly differently than
@@ -514,8 +537,6 @@ static auto PyQuit(PyObject* self, PyObject* args, PyObject* keywds)
       g_core->platform->AndroidSynthesizeBackPress();
       handled = true;
     }
-
-#pragma clang diagnostic pop
 
     if (!handled && soft) {
       // Soft-quit just kills our activity but doesn't run app shutdown.
@@ -732,11 +753,11 @@ static auto PyEnv(PyObject* self) -> PyObject* {
         "ss"  // ui_scale
         "sO"  // on_tv
         "sO"  // vr_mode
-        "sO"  // toolbar_test
+        // "sO"  // toolbar_test
         "sO"  // demo_mode
         "sO"  // arcade_mode
-        "sO"  // iircade_mode
-        "si"  // protocol_version
+        // "sO"  // iircade_mode
+        // "si"  // protocol_version
         "sO"  // headless_mode
         "sO"  // python_directory_app_site
         "ss"  // device_name
@@ -758,11 +779,10 @@ static auto PyEnv(PyObject* self) -> PyObject* {
         "ui_scale", ui_scale,
         "on_tv", g_core->platform->IsRunningOnTV() ? Py_True : Py_False,
         "vr_mode", g_core->IsVRMode() ? Py_True : Py_False,
-        "toolbar_test", BA_TOOLBAR_TEST ? Py_True : Py_False,
         "demo_mode", g_buildconfig.demo_build() ? Py_True : Py_False,
         "arcade_mode", g_buildconfig.arcade_build() ? Py_True : Py_False,
-        "iircade_mode", g_buildconfig.iircade_build() ? Py_True: Py_False,
-        "protocol_version", kProtocolVersion,
+        // "iircade_mode", g_buildconfig.iircade_build() ? Py_True: Py_False,
+        // "protocol_version", kProtocolVersion,
         "headless_mode", g_core->HeadlessMode() ? Py_True : Py_False,
         "python_directory_app_site",
           site_py_dir ? *PythonRef::FromString(*site_py_dir) : Py_None,
@@ -796,13 +816,14 @@ static PyMethodDef PyEnvDef = {
 
 static auto PySetStressTesting(PyObject* self, PyObject* args) -> PyObject* {
   BA_PYTHON_TRY;
-  int testing;
+  int enable;
   int player_count;
-  if (!PyArg_ParseTuple(args, "pi", &testing, &player_count)) {
+  if (!PyArg_ParseTuple(args, "pi", &enable, &player_count)) {
     return nullptr;
   }
-  g_base->app->PushSetStressTestingCall(static_cast<bool>(testing),
-                                        player_count);
+  g_core->main_event_loop()->PushCall([enable, player_count] {
+    g_base->stress_test()->Set(enable, player_count);
+  });
   Py_RETURN_NONE;
   BA_PYTHON_CATCH;
 }
@@ -1243,7 +1264,7 @@ static PyMethodDef PyIsOSPlayingMusicDef = {
     "\n"
     "Tells whether the OS is currently playing music of some sort.\n"
     "\n"
-    "(Used to determine whether the game should avoid playing its own)",
+    "(Used to determine whether the app should avoid playing its own)",
 };
 
 // -------------------------------- exec_arg -----------------------------------
@@ -1273,7 +1294,7 @@ static PyMethodDef PyExecArgDef = {
 static auto PyOnAppRunning(PyObject* self) -> PyObject* {
   BA_PYTHON_TRY;
   BA_PRECONDITION(g_base && g_base->InLogicThread());
-  g_base->app->LogicThreadOnAppRunning();
+  g_base->logic->OnAppRunning();
   Py_RETURN_NONE;
   BA_PYTHON_CATCH;
 }
@@ -1293,7 +1314,7 @@ static PyMethodDef PyOnAppRunningDef = {
 static auto PyOnInitialAppModeSet(PyObject* self) -> PyObject* {
   BA_PYTHON_TRY;
   BA_PRECONDITION(g_base && g_base->InLogicThread());
-  g_base->app->LogicThreadOnInitialAppModeSet();
+  g_base->logic->OnInitialAppModeSet();
   Py_RETURN_NONE;
   BA_PYTHON_CATCH;
 }
@@ -1469,6 +1490,67 @@ static PyMethodDef PyGetImmediateReturnCodeDef = {
     "(internal)\n",
 };
 
+// ----------------------- shutdown_suppress_begin -----------------------------
+
+static auto PyShutdownSuppressBegin(PyObject* self) -> PyObject* {
+  BA_PYTHON_TRY;
+  assert(g_base);
+  g_base->ShutdownSuppressBegin();
+  Py_RETURN_NONE;
+  BA_PYTHON_CATCH;
+}
+
+static PyMethodDef PyShutdownSuppressBeginDef = {
+    "shutdown_suppress_begin",             // name
+    (PyCFunction)PyShutdownSuppressBegin,  // method
+    METH_NOARGS,                           // flags
+
+    "shutdown_suppress_begin() -> None\n"
+    "\n"
+    "(internal)\n",
+};
+
+// ------------------------ shutdown_suppress_end ------------------------------
+
+static auto PyShutdownSuppressEnd(PyObject* self) -> PyObject* {
+  BA_PYTHON_TRY;
+  assert(g_base);
+  g_base->ShutdownSuppressEnd();
+  Py_RETURN_NONE;
+  BA_PYTHON_CATCH;
+}
+
+static PyMethodDef PyShutdownSuppressEndDef = {
+    "shutdown_suppress_end",             // name
+    (PyCFunction)PyShutdownSuppressEnd,  // method
+    METH_NOARGS,                         // flags
+
+    "shutdown_suppress_end() -> None\n"
+    "\n"
+    "(internal)\n",
+};
+
+// ------------------------ shutdown_suppress_count
+// ------------------------------
+
+static auto PyShutdownSuppressCount(PyObject* self) -> PyObject* {
+  BA_PYTHON_TRY;
+  assert(g_base);
+  return PyLong_FromLong(g_base->shutdown_suppress_count());
+  Py_RETURN_NONE;
+  BA_PYTHON_CATCH;
+}
+
+static PyMethodDef PyShutdownSuppressCountDef = {
+    "shutdown_suppress_count",             // name
+    (PyCFunction)PyShutdownSuppressCount,  // method
+    METH_NOARGS,                           // flags
+
+    "shutdown_suppress_count() -> int\n"
+    "\n"
+    "(internal)\n",
+};
+
 // -----------------------------------------------------------------------------
 
 auto PythonMethodsApp::GetMethods() -> std::vector<PyMethodDef> {
@@ -1517,6 +1599,10 @@ auto PythonMethodsApp::GetMethods() -> std::vector<PyMethodDef> {
       PyEmptyAppModeHandleIntentDefaultDef,
       PyEmptyAppModeHandleIntentExecDef,
       PyGetImmediateReturnCodeDef,
+      PyCompleteShutdownDef,
+      PyShutdownSuppressBeginDef,
+      PyShutdownSuppressEndDef,
+      PyShutdownSuppressCountDef,
   };
 }
 

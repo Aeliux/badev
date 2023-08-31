@@ -7,7 +7,6 @@
 #include "ballistica/base/graphics/graphics_server.h"
 #include "ballistica/base/support/huffman.h"
 #include "ballistica/shared/foundation/event_loop.h"
-#include "ballistica/shared/generic/utils.h"
 
 namespace ballistica::base {
 
@@ -44,8 +43,8 @@ void AssetsServer::PushPendingPreload(Object::Ref<Asset>* asset_ref_ptr) {
   });
 }
 
-void AssetsServer::PushBeginWriteReplayCall() {
-  event_loop()->PushCall([this] {
+void AssetsServer::PushBeginWriteReplayCall(uint16_t protocol_version) {
+  event_loop()->PushCall([this, protocol_version] {
     if (replays_broken_) {
       return;
     }
@@ -80,7 +79,7 @@ void AssetsServer::PushBeginWriteReplayCall() {
       // NOTE: We always write replays in our host protocol version
       // no matter what the client stream is.
       uint32_t file_id = kBrpFileID;
-      uint16_t version = kProtocolVersion;
+      uint16_t version = protocol_version;
       if ((fwrite(&file_id, sizeof(file_id), 1, replay_out_file_) != 1)
           || (fwrite(&version, sizeof(version), 1, replay_out_file_) != 1)) {
         fclose(replay_out_file_);

@@ -17,15 +17,15 @@
 #include "ballistica/shared/python/python_sys.h"
 
 #if BA_VR_BUILD
-#include "ballistica/base/app/app_vr.h"
+#include "ballistica/base/app_adapter/app_adapter_vr.h"
 #endif
 
 #if BA_HEADLESS_BUILD
-#include "ballistica/base/app/app_headless.h"
+#include "ballistica/base/app_adapter/app_adapter_headless.h"
 #endif
 
-#include "ballistica/base/app/app.h"
-#include "ballistica/base/app/sdl_app.h"
+#include "ballistica/base/app_adapter/app_adapter.h"
+#include "ballistica/base/app_adapter/app_adapter_sdl.h"
 #include "ballistica/base/graphics/graphics.h"
 #include "ballistica/base/graphics/graphics_vr.h"
 
@@ -105,39 +105,36 @@ void BasePlatform::PostInit() {
 
 BasePlatform::~BasePlatform() = default;
 
-auto BasePlatform::CreateApp() -> App* {
+auto BasePlatform::CreateAppAdapter() -> AppAdapter* {
   assert(g_core);
-  // assert(InMainThread());
-  // assert(g_main_thread);
 
 // TEMP - need to init sdl on our legacy mac build even though its not
 // technically an SDL app. Kill this once the old mac build is gone.
 #if BA_LEGACY_MACOS_BUILD
-  SDLApp::InitSDL();
+  AppAdapterSDL::InitSDL();
 #endif
 
-  App* app{};
+  AppAdapter* app_adapter{};
 
 #if BA_HEADLESS_BUILD
-  app = new AppHeadless(g_core->main_event_loop());
+  app_adapter = new AppAdapterHeadless();
 #elif BA_RIFT_BUILD
   // Rift build can spin up in either VR or regular mode.
   if (g_core->vr_mode) {
-    app = new AppVR(g_core->main_event_loop());
+    app_adapter = new AppAdapterVR();
   } else {
-    app = new SDLApp(g_core->main_event_loop());
+    app_adapter = new AppAdapterSDL();
   }
 #elif BA_CARDBOARD_BUILD
-  app = new AppVR(g_core->main_event_loop());
+  app_adapter = new AppAdapterVR();
 #elif BA_SDL_BUILD
-  app = new SDLApp(g_core->main_event_loop());
+  app_adapter = new AppAdapterSDL();
 #else
-  app = new App(g_core->main_event_loop());
+  app_adapter = new AppAdapter();
 #endif
 
-  assert(app);
-  app->PostInit();
-  return app;
+  assert(app_adapter);
+  return app_adapter;
 }
 
 auto BasePlatform::CreateGraphics() -> Graphics* {
@@ -260,11 +257,21 @@ void BasePlatform::DoOpenURL(const std::string& url) {
 
 #if !BA_OSTYPE_WINDOWS
 static void HandleSIGINT(int s) {
-  if (g_base->logic) {
+  if (g_base && g_base->logic->event_loop()) {
     g_base->logic->event_loop()->PushCall(
         [] { g_base->logic->HandleInterruptSignal(); });
   } else {
-    Log(LogLevel::kError, "SigInt handler called before g_logic exists.");
+    Log(LogLevel::kError,
+        "SigInt handler called before g_base->logic->event_loop exists.");
+  }
+}
+static void HandleSIGTERM(int s) {
+  if (g_base && g_base->logic->event_loop()) {
+    g_base->logic->event_loop()->PushCall(
+        [] { g_base->logic->HandleTerminateSignal(); });
+  } else {
+    Log(LogLevel::kError,
+        "SigInt handler called before g_base->logic->event_loop exists.");
   }
 }
 #endif
@@ -274,11 +281,20 @@ void BasePlatform::SetupInterruptHandling() {
 #if BA_OSTYPE_WINDOWS
   throw Exception();
 #else
-  struct sigaction handler {};
-  handler.sa_handler = HandleSIGINT;
-  sigemptyset(&handler.sa_mask);
-  handler.sa_flags = 0;
-  sigaction(SIGINT, &handler, nullptr);
+  {
+    struct sigaction handler {};
+    handler.sa_handler = HandleSIGINT;
+    sigemptyset(&handler.sa_mask);
+    handler.sa_flags = 0;
+    sigaction(SIGINT, &handler, nullptr);
+  }
+  {
+    struct sigaction handler {};
+    handler.sa_handler = HandleSIGTERM;
+    sigemptyset(&handler.sa_mask);
+    handler.sa_flags = 0;
+    sigaction(SIGTERM, &handler, nullptr);
+  }
 #endif
 }
 
@@ -297,5 +313,12 @@ void BasePlatform::GetCursorPosition(float* x, float* y) {
 }
 
 void BasePlatform::OnMainThreadStartAppComplete() {}
+
+void BasePlatform::OnAppStart() { assert(g_base->InLogicThread()); }
+void BasePlatform::OnAppPause() { assert(g_base->InLogicThread()); }
+void BasePlatform::OnAppResume() { assert(g_base->InLogicThread()); }
+void BasePlatform::OnAppShutdown() { assert(g_base->InLogicThread()); }
+void BasePlatform::OnScreenSizeChange() { assert(g_base->InLogicThread()); }
+void BasePlatform::DoApplyAppConfig() { assert(g_base->InLogicThread()); }
 
 }  // namespace ballistica::base

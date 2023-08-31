@@ -26,7 +26,6 @@
 #include "ballistica/scene_v1/node/texture_sequence_node.h"
 #include "ballistica/scene_v1/node/time_display_node.h"
 #include "ballistica/scene_v1/python/scene_v1_python.h"
-#include "ballistica/scene_v1/support/scene_v1_app_mode.h"
 #include "ballistica/shared/generic/utils.h"
 
 namespace ballistica::scene_v1 {
@@ -51,8 +50,8 @@ void SceneV1FeatureSet::OnModuleExec(PyObject* module) {
   assert(g_scene_v1 == nullptr);
   g_scene_v1 = new SceneV1FeatureSet();
 
-  // Store our C++ front-end with our Python module.
-  // This is what allows others to 'import' our C++ front end.
+  // Store our C++ front-end with our Python module. This is what allows
+  // other C++ code to 'import' our C++ front end and talk to us directly.
   g_scene_v1->StoreOnPythonModule(module);
 
   // Define our classes.

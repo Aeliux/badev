@@ -6,7 +6,6 @@
 #include "ballistica/classic/support/v1_account.h"
 #include "ballistica/core/platform/core_platform.h"
 #include "ballistica/scene_v1/python/scene_v1_python.h"
-#include "ballistica/scene_v1/scene_v1.h"
 #include "ballistica/scene_v1/support/player_spec.h"
 #include "ballistica/shared/generic/utils.h"
 
@@ -33,8 +32,8 @@ void ClassicFeatureSet::OnModuleExec(PyObject* module) {
   assert(g_classic == nullptr);
   g_classic = new ClassicFeatureSet();
 
-  // Store our C++ front-end with our Python module.
-  // This is what allows others to 'import' our C++ front end.
+  // Store our C++ front-end with our Python module. This is what allows
+  // other C++ code to 'import' our C++ front end and talk to us directly.
   g_classic->StoreOnPythonModule(module);
 
   // Import any Python stuff we use into objs_.

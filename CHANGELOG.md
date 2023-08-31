@@ -1,9 +1,77 @@
-### 1.7.26 (build 21213, api 8, 2023-08-17)
+### 1.7.27 (build 21281, api 8, 2023-08-30)
 
+- Fixed a rare crash that could occur if the app shuts down while a background
+  thread is making a web request. The app will now try to wait for any such
+  attempts to complete.
+- Fixed a bug where PlayerSpaz used `bs.apptime()` where `bs.time()` should have
+  been used (thanks EraOSBeta!).
+- Added `babase.app.env` which is a type-friendly object containing various
+  environment/runtime values. Values directly under `app` such as
+  `babase.app.debug_build` will either be consolidated here or moved to classic
+  if they are considered deprecated.
+- Started using Python's `warnings` module to announce deprecations, and turned
+  on deprecation warnings for the release build (by default in Python they are
+  mostly only on for debug builds). This way, when making minor changes, I can
+  keep old code paths intact for a few versions and warn modders that they
+  should transition to new code paths before the old ones disappear. I'd prefer
+  to avoid incrementing api-version again if at all possible since that is such
+  a dramatic event, so this alternative will hopefully allow gently evolving
+  some things without too much breakage.
+- Following up on the above two entries, several attributes under `babase.app`
+  have been relocated to `babase.app.env` and the originals have been given
+  deprecation warnings and will disappear sometime soon. This includes
+  `build_number`, `device_name`, `config_file_path`, `version`, `debug_build`,
+  `test_build`, `data_directory`, `python_directory_user`,
+  `python_directory_app`, `python_directory_app_site`, `api_version`, `on_tv`,
+  `vr_mode`.
+- Reverting the Android keyboard changes from 1.7.26, as I've received a few
+  reports of bluetooth game controllers now thinking they are keyboards. I'm
+  thinking I'll have to bite the bullet and implement something that asks the
+  user what the thing is to solve cases like that.
+- Added tags allowing easily stripping code out of spinoff projects when a
+  specific feature-set is not present. For example, to strip lines out when
+  feature-set 'foo' is not present, surround them by lines containing
+  `__SPINOFF_REQUIRE_FOO_BEGIN__` and `__SPINOFF_REQUIRE_FOO_END__`.
+
+### 1.7.26 (build 21259, api 8, 2023-08-29)
+
+- Android should now be better at detecting hardware keyboards (you will see
+  'Configure Keyboard' and 'Configure Keyboard P2' buttons under
+  Settings->Controllers if a hardware keyboard is detected). It can be a bit
+  tricky distinguishing between gamepad type devices and keyboards on Android,
+  so please holler if you have a gamepad that now suddenly thinks it is a
+  keyboard or anything like that.
 - Various general improvements to the pcommand (project command) system.
 - Modules containing pcommand functions are now named with an 's' - so
   `pcommands.py` instead of `pcommand.py`. `pcommand.py` in efrotools is now
   solely related to the functioning of the pcommand system.
+- Implemented the `pcommandbatch` system, which is a way to run pcommands using
+  a simple local server/client architecture, and set up key build targets to use
+  that by default instead of regular pcommand. In some cases, such as when
+  assembling build assets, this can speed things up by 5x or so. Run `make
+  pcommandbatch_speed_test` to see what the theoretical biggest speedup is on
+  your system. If you run into any problems that seem to be related to this, you
+  can disable it by setting env var `BA_PCOMMANDBATCH_DISABLE=1` which will
+  cause everything to go use regular old pcommand. See docs in
+  `tools/efrotools/pcommandbatch.py` for more info.
+- Renamed the various `App` C++ classes to `AppAdapter` which better represents
+  their current intended role. They are not a general interface to app
+  functionality, but rather adapt the app to a particular paradigm or api (VR,
+  Headless, SDL GUI, etc.). Also am trying to move any functionality out of
+  those classes that does not fit that definition.
+- Started cleaning up the app shutdown process. This will allow the app to
+  gracefully run tasks such as syncing account data to the cloud or disk or
+  properly closing the audio system when shutting down. It also means there
+  should be more consistent use of the 'Quit?' confirm window. Please holler if
+  you see any odd behavior when trying to quit the app.
+- Unix TERM signal now triggers graceful app shutdown.
+- Added `app.add_shutdown_task()` to register coroutines to be run as part of
+  shutdown.
+- Removed `app.iircade_mode`. RIP iiRcade :(.
+- Changed `AppState.INITIAL` to `AppState.NOT_RUNNING`, added a
+  `AppState.NATIVE_BOOTSTRAPPING`, and changed `AppState.LAUNCHING` to
+  `AppState.INITING`. These better describe what the app is actually doing while
+  in those states.
 
 ### 1.7.25 (build 21211, api 8, 2023-08-03)
 

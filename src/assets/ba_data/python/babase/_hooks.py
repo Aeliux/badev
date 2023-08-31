@@ -23,11 +23,6 @@ if TYPE_CHECKING:
     pass
 
 
-def on_app_bootstrapping_complete() -> None:
-    """Called by C++ layer when bootstrapping finishes."""
-    _babase.app.on_app_bootstrapping_complete()
-
-
 def reset_to_main_menu() -> None:
     # Some high-level event wants us to return to the main menu.
     # an example of this is re-opening the game after we 'soft' quit it
@@ -97,7 +92,7 @@ def connection_failed_message() -> None:
 def temporarily_unavailable_message() -> None:
     from babase._language import Lstr
 
-    if not _babase.app.headless_mode:
+    if _babase.app.env.gui:
         _babase.getsimplesound('error').play()
         _babase.screenmessage(
             Lstr(resource='getTicketsWindow.unavailableTemporarilyText'),
@@ -108,7 +103,7 @@ def temporarily_unavailable_message() -> None:
 def in_progress_message() -> None:
     from babase._language import Lstr
 
-    if not _babase.app.headless_mode:
+    if _babase.app.env.gui:
         _babase.getsimplesound('error').play()
         _babase.screenmessage(
             Lstr(resource='getTicketsWindow.inProgressText'),
@@ -119,7 +114,7 @@ def in_progress_message() -> None:
 def error_message() -> None:
     from babase._language import Lstr
 
-    if not _babase.app.headless_mode:
+    if _babase.app.env.gui:
         _babase.getsimplesound('error').play()
         _babase.screenmessage(Lstr(resource='errorText'), color=(1, 0, 0))
 
@@ -127,7 +122,7 @@ def error_message() -> None:
 def purchase_not_valid_error() -> None:
     from babase._language import Lstr
 
-    if not _babase.app.headless_mode:
+    if _babase.app.env.gui:
         _babase.getsimplesound('error').play()
         _babase.screenmessage(
             Lstr(
@@ -141,7 +136,7 @@ def purchase_not_valid_error() -> None:
 def purchase_already_in_progress_error() -> None:
     from babase._language import Lstr
 
-    if not _babase.app.headless_mode:
+    if _babase.app.env.gui:
         _babase.getsimplesound('error').play()
         _babase.screenmessage(
             Lstr(resource='store.purchaseAlreadyInProgressText'),
@@ -172,14 +167,6 @@ def orientation_reset_message() -> None:
     )
 
 
-def on_app_pause() -> None:
-    _babase.app.pause()
-
-
-def on_app_resume() -> None:
-    _babase.app.resume()
-
-
 def show_post_purchase_message() -> None:
     assert _babase.app.classic is not None
     _babase.app.classic.accounts.show_post_purchase_message()
@@ -208,7 +195,7 @@ def award_dual_wielding_achievement() -> None:
 
 
 def play_gong_sound() -> None:
-    if not _babase.app.headless_mode:
+    if _babase.app.env.gui:
         _babase.getsimplesound('gong').play()
 
 
@@ -272,15 +259,11 @@ def toggle_fullscreen() -> None:
     cfg.apply_and_commit()
 
 
-def read_config() -> None:
-    _babase.app.read_config()
-
-
 def ui_remote_press() -> None:
     """Handle a press by a remote device that is only usable for nav."""
     from babase._language import Lstr
 
-    if _babase.app.headless_mode:
+    if _babase.app.env.headless:
         return
 
     # Can be called without a context; need a context for getsound.
@@ -298,10 +281,6 @@ def remove_in_game_ads_message() -> None:
 
 def do_quit() -> None:
     _babase.quit()
-
-
-def shutdown() -> None:
-    _babase.app.on_app_shutdown()
 
 
 def hash_strings(inputs: list[str]) -> str:
@@ -375,11 +354,11 @@ def show_client_too_old_error() -> None:
     # a newer build.
     if (
         _babase.app.config.get('SuppressClientTooOldErrorForBuild')
-        == _babase.app.build_number
+        == _babase.app.env.build_number
     ):
         return
 
-    if not _babase.app.headless_mode:
+    if _babase.app.env.gui:
         _babase.getsimplesound('error').play()
 
     _babase.screenmessage(

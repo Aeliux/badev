@@ -588,8 +588,6 @@ auto CorePlatform::GetLegacyUserAgentString() -> std::string {
     subplatform = "DeMo";
   } else if (g_buildconfig.arcade_build()) {
     subplatform = "ArCd";
-  } else if (g_buildconfig.iircade_build()) {
-    subplatform = "iiRcd";
   } else {
     subplatform = "TstB";
   }
@@ -644,22 +642,6 @@ auto CorePlatform::GetTextTextureData(void* tex) -> uint8_t* {
   throw Exception();
 }
 
-void CorePlatform::OnAppStart() {
-  // assert(g_base_soft && g_base_soft->InLogicThread());
-}
-
-void CorePlatform::OnAppPause() {
-  // assert(g_base_soft && g_base_soft->InLogicThread());
-}
-
-void CorePlatform::OnAppResume() {
-  // assert(g_base_soft && g_base_soft->InLogicThread());
-}
-
-void CorePlatform::OnAppShutdown() {
-  // assert(g_base_soft && g_base_soft->InLogicThread());
-}
-
 void CorePlatform::OnScreenSizeChange() {
   assert(g_base_soft && g_base_soft->InLogicThread());
 }
@@ -700,8 +682,6 @@ void CorePlatform::AndroidSetResString(const std::string& res) {
   throw Exception();
 }
 
-void CorePlatform::DoApplyAppConfig() {}
-
 void CorePlatform::AndroidSynthesizeBackPress() {
   Log(LogLevel::kError, "AndroidSynthesizeBackPress() unimplemented");
 }
@@ -717,9 +697,6 @@ auto CorePlatform::GetDeviceV1AccountID() -> std::string {
 
   // Everything else is just considered a 'local' account, though we may
   // give unique ids for unique builds..
-  if (g_buildconfig.iircade_build()) {
-    return "L-iRc" + GetLegacyDeviceUUID();
-  }
   return "L-" + GetLegacyDeviceUUID();
 }
 
