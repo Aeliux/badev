@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "badev"
-version = "1.7.25"
+version = "1.7.27"
 description = "The BombSquad Modding Helper"
 authors = ["Aeliux <itsaeliux@gmail.com>"]
 license = "MIT"
